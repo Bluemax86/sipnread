@@ -101,7 +101,6 @@ export default function LandingPage() {
   return (
     <div className="container mx-auto min-h-screen flex flex-col items-center justify-center py-8 selection:bg-accent selection:text-accent-foreground">
       <header className="text-center mb-10">
-        {/* Replaced Sparkles icon with the custom image */}
         <Image 
           src="/swirl-logo.png" 
           alt="SipnRead Swirl Logo" 
@@ -110,7 +109,9 @@ export default function LandingPage() {
           className="mx-auto mb-4"
           data-ai-hint="logo swirl"
         />
-        <h1 className="text-5xl md:text-6xl font-headline text-primary mb-3 tracking-tight">Welcome to Sip-n-Read!</h1>
+        <h1 className="text-5xl md:text-6xl font-headline text-primary mb-3 tracking-tight">
+          Welcome to<span className="md:inline"> </span><br className="md:hidden" />Sip-n-Read!
+        </h1>
         <p className="text-lg md:text-xl text-muted-foreground">Discover the secrets hidden in your tea leaves.</p>
       </header>
 
@@ -208,12 +209,10 @@ export default function LandingPage() {
               <p><span className="font-semibold">Get Your Reading:</span> Upload your photo(s). You can also ask a specific question to guide the AI.</p>
             </div>
             <div className="flex items-start">
-              {/* Changed the Lucide Sparkles icon to the custom image here as well, if desired, or keep it if it's distinct.
-                  For this specific request, I'll assume you want to keep the Sparkles icon here. If not, let me know. */}
               <Image 
                 src="/swirl-logo.png" 
                 alt="SipnRead Swirl Detail" 
-                width={20} // Smaller size for inline use
+                width={20}
                 height={20} 
                 className="text-primary mr-3 mt-0.5 shrink-0"
                 data-ai-hint="logo swirl"
