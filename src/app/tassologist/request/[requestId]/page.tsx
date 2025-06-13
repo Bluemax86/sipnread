@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useAuth, type UserProfile } from '@/contexts/AuthContext';
 import { db, app as firebaseApp } from '@/lib/firebase'; 
-import { getFunctions, httpsCallable } from 'firebase/functions'; 
+import { getFunctions, httpsCallable, type FunctionsError } from 'firebase/functions'; 
 import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import type { TeaReadingDocument as BaseTeaReadingDocument, RoxyPersonalizedReadingRequest as BaseRoxyPersonalizedReadingRequest, SaveTassologistInterpretationType, TranscriptionStatus } from '../../../actions'; 
 import { getTranscriptionResultAction } from '../../../actions';
@@ -217,7 +217,7 @@ export default function ProcessRequestPage() {
       
     } catch (err: unknown) {
       // HttpsError from callable will be caught here
-      const errMessage = err instanceof Error ? (err as any).details?.message || err.message : "An unexpected error occurred.";
+      const errMessage = err instanceof Error ? ((err as Error & { details?: { message?: string } }).details?.message || err.message) : "An unexpected error occurred.";
       toast({ variant: "destructive", title: "Error Saving Interpretation", description: errMessage });
     } finally {
       setIsSubmittingForm(false);
@@ -417,7 +417,7 @@ export default function ProcessRequestPage() {
                       </DialogTrigger>
                       <DialogContent className="max-w-[90vw] sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl p-1 bg-transparent border-0 shadow-none overflow-hidden">
                         <DialogHeader>
-                          <ShadDialogTitle className="sr-only">Enlarged tea cup image {index + 1}</ShadDialogTitle>
+                          <ShadDialogTitle className="sr-only">Enlarged tea cup image ${index + 1}</ShadDialogTitle>
                         </DialogHeader>
                         <div className="relative w-full h-auto max-h-[85vh] flex justify-center items-center">
                            <Image
