@@ -1,0 +1,35 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Profiles: Users can read/write their own profile.
+    match /profiles/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Readings: Users can read/write their own readings.
+    // Tassologists might need read access to original readings linked to personalized requests.
+    match /readings/{readingId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow get: if request.auth != null && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'tassologist';
+    }
+
+    // PersonalizedReadings:
+    // Users can read/write their own requests.
+    // Tassologists can read/write any request.
+    match /personalizedReadings/{requestId} {
+      allow read, write: if request.auth != null && (
+        request.auth.uid == resource.data.userId ||
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'tassologist'
+      );
+    }
+
+    // Mail collection: Generally should be write-only by functions.
+    // Deny client-side read/write for security.
+    match /mail/{mailId} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -38,7 +38,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-/storage.rules
 
 .genkit/*
 .env*
@@ -50,9 +49,7 @@ firestore-debug.log
 
 #API Keys
 sipnread-google-speech-service-account-key.json
-firebase.storage.rules
 firestore-debug.log
-firestore.rules
 
 # If you specifically track your functions/ source but not their builds:
 # For example, if 'functions' is part of your deploy, but its own 'node_modules' and '.next' are not.
