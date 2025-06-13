@@ -72,7 +72,7 @@ export const updateUserProfileCallable = onCall(async (request) => {
     const validatedData = UpdateUserProfileCallableInputSchema.parse(data);
 
     const profileRef = adminDb.collection("profiles").doc(userId);
-    const updatePayload: Record<string, unknown> = { // Changed any to unknown
+    const updatePayload: Record<string, unknown> = {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
@@ -215,7 +215,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
       console.warn("[submitRoxyReadingRequestCallable] No tassologist found. Request will be created without assignment.");
     }
 
-    const requestDocData: Record<string, unknown> = { // Changed any to unknown
+    const requestDocData: Record<string, unknown> = {
       userId,
       userEmail: validatedData.userEmail,
       requestDate: admin.firestore.FieldValue.serverTimestamp(),
@@ -288,6 +288,18 @@ const SaveTassologistInterpretationCallableInputSchema = z.object({
 });
 export type SaveTassologistInterpretationCallableInput = z.infer<typeof SaveTassologistInterpretationCallableInputSchema>;
 
+type PersonalizedReadingStatus = 'new' | 'in-progress' | 'completed' | 'cancelled' | 'read';
+type TranscriptionStatus = 'not_requested' | 'pending' | 'completed' | 'failed' | null;
+
+interface RequestUpdatePayload {
+  updatedAt: admin.firestore.FieldValue;
+  transcriptionError: string | null;
+  completionDate?: admin.firestore.FieldValue;
+  status?: PersonalizedReadingStatus;
+  transcriptionStatus?: TranscriptionStatus;
+}
+
+
 export const saveTassologistInterpretationCallable = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "The function must be called by an authenticated Tassologist.");
@@ -316,13 +328,17 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
 
     const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
     let newStatus: 'in-progress' | 'completed' = 'in-progress';
-    const requestUpdates: Record<string, unknown> = { updatedAt: currentTime, transcriptionError: null }; // Changed any to unknown
+    
+    const requestUpdates: RequestUpdatePayload = { 
+        updatedAt: currentTime, 
+        transcriptionError: null 
+    };
 
     if (validatedData.saveType === 'complete') {
       newStatus = 'completed';
       requestUpdates.completionDate = currentTime;
       const currentRequestSnap = await requestDocRef.get();
-      if (currentRequestSnap.exists()) {
+      if (currentRequestSnap.exists) { // Corrected: .exists is a property
         const currentRequestData = currentRequestSnap.data();
         if (currentRequestData?.transcriptionStatus === 'pending') {
           requestUpdates.transcriptionStatus = 'completed';
@@ -394,7 +410,7 @@ export const markPersonalizedReadingAsReadCallable = onCall(async (request) => {
     const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
     const requestDocSnap = await requestDocRef.get();
 
-    if (!requestDocSnap.exists()) {
+    if (!requestDocSnap.exists) { // Corrected: .exists is a property
       throw new HttpsError("not-found", "Personalized reading request not found.");
     }
 
@@ -600,5 +616,3 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
   }
   */
 });
-
-
