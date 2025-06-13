@@ -150,16 +150,15 @@ export default function TassologistDashboardPage() {
             <Button
             onClick={() => {
               console.log(
-                "[TassologistDashboardPage] 'View and Process' clicked. Auth State:",
-                {
-                  isUserObjectPresent: !!user,
-                  uid: user?.uid,
-                  email: user?.email,
-                  isUserProfilePresent: !!userProfile,
-                  role: userProfile?.role,
-                  profileName: userProfile?.name,
-                  isTassologist: userProfile?.role === 'tassologist'
-                }
+                `[TassologistDashboardPage] 'View and Process' clicked. Auth State:\n` +
+                `  User Object Present: ${!!user}\n` +
+                `  User UID: ${user?.uid || 'N/A'}\n` +
+                `  User Email: ${user?.email || 'N/A'}\n` +
+                `  User Profile Present: ${!!userProfile}\n` +
+                `  User Profile Role: ${userProfile?.role || 'N/A'}\n` +
+                `  User Profile Name: ${userProfile?.name || 'N/A'}\n` +
+                `  Is Tassologist: ${userProfile?.role === 'tassologist'}\n` +
+                `  Full User Profile (JSON): ${JSON.stringify(userProfile, null, 2)}`
               );
               router.push(`/tassologist/request/${request.id}`);
             }}
