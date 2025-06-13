@@ -45,20 +45,20 @@ exports.processAndTranscribeAudioCallable = exports.markPersonalizedReadingAsRea
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 const zod_1 = require("zod");
-// import { SpeechClient } from '@google-cloud/speech'; // Commented out as speechClient is unused
-// import { Storage } from '@google-cloud/storage'; // Commented out as storage is unused
+// import { SpeechClient } from '@google-cloud/speech';
+// import { Storage } from '@google-cloud/storage';
 // Initialize Firebase Admin SDK
 if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 const adminDb = admin.firestore();
 // SDK Clients - Initialize them once globally.
-// let speechClient: SpeechClient; // Commented out as unused
-// let storage: Storage; // Commented out as unused
-/* // Commenting out the try-catch block for SpeechClient initialization as it's unused
+// let speechClient: SpeechClient;
+// let storage: Storage;
+/*
 try {
     console.log('[Global Init] Attempting to initialize SpeechClient...');
-    // speechClient = new SpeechClient(); // Commented out as it's unused in current simplified logic
+    // speechClient = new SpeechClient();
     console.log('[Global Init] SpeechClient initialization skipped (currently unused).');
 } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
@@ -66,10 +66,10 @@ try {
     console.error('[Global Init] CRITICAL: Failed to initialize SpeechClient:', message, stack);
 }
 */
-/* // Commenting out the try-catch block for Storage client initialization as it's unused
+/*
 try {
     console.log('[Global Init] Attempting to initialize Storage client...');
-    // storage = new Storage(); // Commented out as it's unused in current simplified logic
+    // storage = new Storage();
     console.log('[Global Init] Storage client initialization skipped (currently unused).');
 } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
@@ -310,9 +310,9 @@ exports.saveTassologistInterpretationCallable = (0, https_1.onCall)(async (reque
             newStatus = 'completed';
             requestUpdates.completionDate = currentTime;
             const currentRequestSnap = await requestDocRef.get();
-            if (currentRequestSnap.exists) { // Corrected: .exists is a property
+            if (currentRequestSnap.exists) {
                 const currentRequestData = currentRequestSnap.data();
-                if (currentRequestData?.transcriptionStatus === 'pending') {
+                if (currentRequestData && currentRequestData.transcriptionStatus === 'pending') {
                     requestUpdates.transcriptionStatus = 'completed';
                 }
             }
@@ -374,7 +374,7 @@ exports.markPersonalizedReadingAsReadCallable = (0, https_1.onCall)(async (reque
         const validatedData = MarkPersonalizedReadingAsReadCallableInputSchema.parse(data);
         const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
         const requestDocSnap = await requestDocRef.get();
-        if (!requestDocSnap.exists) { // Corrected: .exists is a property
+        if (!requestDocSnap.exists) {
             throw new https_1.HttpsError("not-found", "Personalized reading request not found.");
         }
         const requestData = requestDocSnap.data();
@@ -434,7 +434,10 @@ exports.processAndTranscribeAudioCallable = (0, https_1.onCall)(processAudioCall
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error in simplified logic";
         const errorStack = error instanceof Error ? error.stack : undefined;
-        const errorDetails = (typeof error === 'object' && error !== null && 'details' in error) ? error.details : undefined;
+        let errorDetails;
+        if (typeof error === 'object' && error !== null && 'details' in error) {
+            errorDetails = error.details;
+        }
         console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR (Simplified Debugging Catch) for Tassologist ${tassologistId}, request ${data?.personalizedReadingRequestId || 'UNKNOWN_REQUEST_ID'}:`, errorMessage, errorStack, errorDetails);
         console.error(`[processAndTranscribeAudioCallable] RAW ERROR OBJECT (Simplified Debugging Catch):`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
         throw new https_1.HttpsError("internal", "Simplified function encountered an error: " + errorMessage);
@@ -450,8 +453,8 @@ exports.processAndTranscribeAudioCallable = (0, https_1.onCall)(processAudioCall
       console.error("[processAndTranscribeAudioCallable] Authentication failed: No auth context.");
       throw new HttpsError("unauthenticated", "The function must be called by an authenticated Tassologist.");
     }
-    // const tassologistId = callableRequest.auth.uid; // Already defined above
-    // const data = callableRequest.data as ProcessAndTranscribeAudioCallableInput; // Already defined above
+    // const tassologistId = callableRequest.auth.uid;
+    // const data = callableRequest.data as ProcessAndTranscribeAudioCallableInput;
     // console.log(`[processAndTranscribeAudioCallable] Received data for request ID: ${data.personalizedReadingRequestId}, Tassologist: ${tassologistId}, MIME Type: ${data.mimeType}`);
   
     try {
@@ -522,10 +525,19 @@ exports.processAndTranscribeAudioCallable = (0, https_1.onCall)(processAudioCall
   
     } catch (error: unknown) {
       const tassologistIdForError = callableRequest?.auth?.uid || 'UNKNOWN_TASSOLOGIST';
-      const requestIdForError = (callableRequest?.data as ProcessAndTranscribeAudioCallableInput | undefined)?.personalizedReadingRequestId || 'UNKNOWN_REQUEST_ID';
+      let requestIdForError = 'UNKNOWN_REQUEST_ID';
+      if (typeof callableRequest?.data === 'object' && callableRequest.data !== null && 'personalizedReadingRequestId' in callableRequest.data) {
+          requestIdForError = (callableRequest.data as ProcessAndTranscribeAudioCallableInput).personalizedReadingRequestId;
+      }
+      
   
       console.error(`[processAndTranscribeAudioCallable] RAW ERROR OBJECT:`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
-      console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR for Tassologist ${tassologistIdForError}, request ${requestIdForError}:`, (error as Error).message, (error as Error).stack, (error as {details?: unknown}).details);
+      if (error instanceof Error) {
+          console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR for Tassologist ${tassologistIdForError}, request ${requestIdForError}:`, error.message, error.stack, (error as {details?: unknown}).details);
+      } else {
+          console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR for Tassologist ${tassologistIdForError}, request ${requestIdForError}: Non-Error object thrown:`, error);
+      }
+  
   
       let errorMessage = "Failed to process audio and start transcription. Please check server logs for details.";
   
@@ -535,13 +547,14 @@ exports.processAndTranscribeAudioCallable = (0, https_1.onCall)(processAudioCall
         throw new HttpsError("invalid-argument", errorMessage);
       }
       
-      const gcpError = error as {code?: string | number; message?: string; details?: string}; // Using 'as any' to access potential gRPC/GCP specific error codes/messages
+      // Using type assertion for gcpError
+      const gcpError = error as {code?: string | number; message?: string; details?: string};
   
       if (gcpError.code === 'storage/object-not-found') {
         errorMessage = "GCS object not found after upload attempt, or bucket issue.";
       } else if (gcpError.message && (gcpError.message.includes("SpeechClient") || gcpError.message.includes("speech.googleapis.com"))) {
         errorMessage = `Speech API error: ${gcpError.message}`;
-      } else if (gcpError.code && typeof gcpError.code === 'number') { // Check for gRPC-like error codes
+      } else if (gcpError.code && typeof gcpError.code === 'number') {
           errorMessage = `gRPC Error Code ${gcpError.code}: ${gcpError.message || gcpError.details || 'Unknown gRPC error'}`;
       } else if (gcpError.message) {
         errorMessage = gcpError.message;
