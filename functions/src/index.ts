@@ -117,7 +117,7 @@ const AiSymbolSchemaCallable = z.object({
 // Zod schema for input validation for saveReadingDataCallable
 const SaveReadingDataCallableInputSchema = z.object({
   imageStorageUrls: z.array(z.string().url()),
-  aiSymbolsDetected: z.array(AiSymbolSchemaCallable), 
+  aiSymbolsDetected: z.array(AiSymbolSchemaCallable),
   aiInterpretation: z.string(),
   userQuestion: z.string().optional().nullable(),
   userSymbolNames: z.array(z.string()).optional().nullable(),
@@ -136,22 +136,22 @@ export const saveReadingDataCallable = onCall(async (request) => {
     const validatedData = SaveReadingDataCallableInputSchema.parse(data);
 
     const readingDocData = {
-      userId, 
+      userId,
       readingDate: admin.firestore.FieldValue.serverTimestamp(),
       photoStorageUrls: validatedData.imageStorageUrls,
-      aiSymbolsDetected: validatedData.aiSymbolsDetected, 
+      aiSymbolsDetected: validatedData.aiSymbolsDetected,
       aiInterpretation: validatedData.aiInterpretation,
       userQuestion: validatedData.userQuestion || null,
       userSymbolNames: validatedData.userSymbolNames || [],
-      manualSymbolsDetected: [], 
-      manualInterpretation: "", 
+      manualSymbolsDetected: [],
+      manualInterpretation: "",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
     const readingRef = await adminDb.collection('readings').add(readingDocData);
 
     const profileRef = adminDb.collection('profiles').doc(userId);
-    const profileSnap = await profileRef.get(); 
+    const profileSnap = await profileRef.get();
     if (profileSnap.exists) {
         await profileRef.update({
             numberOfReadings: admin.firestore.FieldValue.increment(1),
@@ -190,7 +190,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
 
   try {
     const validatedData = SubmitRoxyReadingRequestCallableInputSchema.parse(data);
-    
+
     let assignedTassologistId: string | undefined = undefined;
     let tassologistEmailForNotification: string | undefined = undefined;
 
@@ -199,7 +199,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
     if (!tassologistsSnapshot.empty) {
       const tassologistDoc = tassologistsSnapshot.docs[0];
       assignedTassologistId = tassologistDoc.id;
-      tassologistEmailForNotification = tassologistDoc.data().email; 
+      tassologistEmailForNotification = tassologistDoc.data().email;
     } else {
       console.warn("[submitRoxyReadingRequestCallable] No tassologist found. Request will be created without assignment.");
     }
@@ -209,7 +209,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
       userEmail: validatedData.userEmail,
       requestDate: admin.firestore.FieldValue.serverTimestamp(),
       status: 'new' as const,
-      price: 50, 
+      price: 50,
       paymentStatus: 'pending' as const,
       userSatisfaction: null,
       tassologistId: assignedTassologistId || null,
@@ -225,7 +225,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
 
     if (tassologistEmailForNotification) {
       const subject = `New Personalized Reading Request - ID: ${requestRef.id}`;
-      const htmlBody = \`
+      const htmlBody = `
         <p>Hello Roxy,</p>
         <p>A new personalized tea leaf reading request has been submitted.</p>
         <ul>
@@ -235,7 +235,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
         </ul>
         <p>Please log in to the Tassologist Dashboard to view and process this request.</p>
         <p>Thank you,<br/>Sip-n-Read System</p>
-      \`;
+      `;
       await adminDb.collection('mail').add({
         to: [tassologistEmailForNotification],
         message: { subject, html: htmlBody },
@@ -258,19 +258,19 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
 
 const ManualSymbolCallableSchema = z.object({
   symbol: z.string(),
-  position: z.number().optional(), 
+  position: z.number().optional(),
 });
 
 const StoredManualSymbolSchema = z.object({
   symbolName: z.string(),
-  truePositionInCup: z.string(), 
+  truePositionInCup: z.string(),
 });
 export type StoredManualSymbol = z.infer<typeof StoredManualSymbolSchema>;
 
 const SaveTassologistInterpretationCallableInputSchema = z.object({
   requestId: z.string().min(1),
   originalReadingId: z.string().min(1),
-  manualSymbols: z.array(ManualSymbolCallableSchema), 
+  manualSymbols: z.array(ManualSymbolCallableSchema),
   manualInterpretation: z.string().min(1, "Interpretation cannot be empty."),
   saveType: z.enum(['complete', 'draft']),
 });
@@ -285,26 +285,26 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
 
   try {
     const validatedData = SaveTassologistInterpretationCallableInputSchema.parse(data);
-    
+
     const batch = adminDb.batch();
     const currentTime = admin.firestore.FieldValue.serverTimestamp();
 
     const readingDocRef = adminDb.collection('readings').doc(validatedData.originalReadingId);
-    
+
     const symbolsToStore: StoredManualSymbol[] = validatedData.manualSymbols.map(ms => ({
         symbolName: ms.symbol,
         truePositionInCup: (ms.position !== undefined && ms.position !== null && ms.position !== 0) ? `${ms.position} o'clock` : 'General area',
     }));
 
     batch.update(readingDocRef, {
-      manualSymbolsDetected: symbolsToStore, 
+      manualSymbolsDetected: symbolsToStore,
       manualInterpretation: validatedData.manualInterpretation,
       updatedAt: currentTime,
     });
 
     const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
     let newStatus: 'in-progress' | 'completed' = 'in-progress';
-    const requestUpdates: Record<string, any> = { updatedAt: currentTime, transcriptionError: null }; 
+    const requestUpdates: Record<string, any> = { updatedAt: currentTime, transcriptionError: null };
 
     if (validatedData.saveType === 'complete') {
       newStatus = 'completed';
@@ -313,13 +313,13 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
       if (currentRequestSnap.exists()) {
         const currentRequestData = currentRequestSnap.data();
         if (currentRequestData?.transcriptionStatus === 'pending') {
-          requestUpdates.transcriptionStatus = 'completed'; 
+          requestUpdates.transcriptionStatus = 'completed';
         }
       }
     }
     requestUpdates.status = newStatus;
     batch.update(requestDocRef, requestUpdates);
-    
+
     await batch.commit();
 
     if (validatedData.saveType === 'complete') {
@@ -327,13 +327,13 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
       if (reqSnap.exists) {
         const completedRequestData = reqSnap.data();
         if (completedRequestData && completedRequestData.userEmail) {
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002'; 
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
           let readingUrl = `${appUrl}/my-readings`;
           if (validatedData.originalReadingId) {
             readingUrl = `${appUrl}/my-readings/${validatedData.originalReadingId}?roxyRequestId=${validatedData.requestId}`;
           }
           const subject = "Your Sip-n-Read Personalized Reading is Ready!";
-          const htmlBody = \`
+          const htmlBody = `
             <p>Hello,</p>
             <p>Great news! Your personalized tea leaf reading from Roxy O'Reilly is now complete and ready for you to view.</p>
             <p>You can access your reading by clicking the link below:</p>
@@ -342,7 +342,7 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
             <p>${readingUrl}</p>
             <p>We hope you find insight and enjoyment in your reading.</p>
             <p>Warmly,<br/>The Sip-n-Read Team</p>
-          \`;
+          `;
           await adminDb.collection('mail').add({
             to: [completedRequestData.userEmail],
             message: { subject, html: htmlBody },
@@ -377,14 +377,14 @@ export const markPersonalizedReadingAsReadCallable = onCall(async (request) => {
 
   try {
     const validatedData = MarkPersonalizedReadingAsReadCallableInputSchema.parse(data);
-    
+
     const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
     const requestDocSnap = await requestDocRef.get();
 
     if (!requestDocSnap.exists()) {
       throw new HttpsError("not-found", "Personalized reading request not found.");
     }
-    
+
     const requestData = requestDocSnap.data();
     if (!requestData || requestData.userId !== userId) {
       throw new HttpsError("permission-denied", "You do not have permission to update this reading request.");
@@ -421,7 +421,7 @@ const ProcessAndTranscribeAudioCallableInputSchema = z.object({
 export type ProcessAndTranscribeAudioCallableInput = z.infer<typeof ProcessAndTranscribeAudioCallableInputSchema>;
 
 const processAudioCallableOptions: HttpsOptions = {
-  cors: true, 
+  cors: true,
 };
 
 export const processAndTranscribeAudioCallable = onCall(processAudioCallableOptions, async (callableRequest) => {
@@ -439,7 +439,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
   try {
     // Simulate some work
     await new Promise(resolve => setTimeout(resolve, 50)); // Short delay
-    
+
     console.log('[processAndTranscribeAudioCallable] Simplified logic returning dummy success.');
     return { success: true, operationName: "dummy-operation-" + Date.now(), message: "Audio processed (dummy) and transcription started (dummy)." };
 
@@ -455,7 +455,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     console.error('[processAndTranscribeAudioCallable] CRITICAL: SpeechClient or Storage client not initialized. Function cannot proceed.');
     throw new HttpsError("internal", "Core services not initialized. Check server logs.");
   }
-  
+
   if (!callableRequest.auth) {
     console.error("[processAndTranscribeAudioCallable] Authentication failed: No auth context.");
     throw new HttpsError("unauthenticated", "The function must be called by an authenticated Tassologist.");
@@ -467,7 +467,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
   try {
     const validatedData = ProcessAndTranscribeAudioCallableInputSchema.parse(data);
     console.log('[processAndTranscribeAudioCallable] Data validated successfully.');
-    
+
     const { audioBase64, personalizedReadingRequestId, mimeType } = validatedData;
 
     const GCLOUD_STORAGE_BUCKET_ENV = process.env.GCLOUD_STORAGE_BUCKET;
@@ -477,25 +477,25 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     console.log(`[processAndTranscribeAudioCallable] ENV Vars: GCLOUD_STORAGE_BUCKET=${GCLOUD_STORAGE_BUCKET_ENV}, GCP_PROJECT=${GCP_PROJECT_ENV}, GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT_ENV}`);
 
     const bucketName = GCLOUD_STORAGE_BUCKET_ENV || `${GCP_PROJECT_ENV || GOOGLE_CLOUD_PROJECT_ENV}.appspot.com`;
-    
+
     if (!bucketName || bucketName.includes("undefined") || bucketName === ".appspot.com") {
         console.error("[processAndTranscribeAudioCallable] GCS bucket name could not be determined or is invalid. Ensure GCLOUD_STORAGE_BUCKET or GCP_PROJECT/GOOGLE_CLOUD_PROJECT env var is set. Current bucketName:", bucketName);
         throw new HttpsError("internal", "Storage bucket configuration error. Bucket name missing or invalid.");
     }
     console.log(`[processAndTranscribeAudioCallable] Using bucket: ${bucketName}`);
-    
+
     const audioBuffer = Buffer.from(audioBase64, 'base64');
     const audioFileExtension = mimeType.split('/')[1] || 'webm';
     const audioFileName = `dictation-${Date.now()}.${audioFileExtension}`;
     const gcsFilePath = `tassologist-dictations-callable/${personalizedReadingRequestId}/${audioFileName}`;
 
     console.log(`[processAndTranscribeAudioCallable] Uploading audio to gs://${bucketName}/${gcsFilePath}`);
-    
+
     const file = storage.bucket(bucketName).file(gcsFilePath);
     await file.save(audioBuffer, {
       metadata: { contentType: mimeType },
     });
-    
+
     const gcsUri = `gs://${bucketName}/${gcsFilePath}`;
     console.log(`[processAndTranscribeAudioCallable] Audio uploaded successfully to: ${gcsUri}`);
 
@@ -503,7 +503,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     const configRec = {
       languageCode: 'en-US',
       enableAutomaticPunctuation: true,
-      model: 'long', 
+      model: 'long',
       audioChannelCount: 1,
       enableWordTimeOffsets: false,
     };
@@ -522,7 +522,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
       dictatedAudioGcsUri: gcsUri,
       transcriptionOperationId: operation.name,
       transcriptionStatus: 'pending',
-      transcriptionError: null, 
+      transcriptionError: null,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     console.log(`[processAndTranscribeAudioCallable] Firestore update successful for ${personalizedReadingRequestId}`);
@@ -533,25 +533,25 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
   } catch (error: any) {
     console.error(`[processAndTranscribeAudioCallable] RAW ERROR OBJECT:`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
     console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR for Tassologist ${tassologistId}, request ${data?.personalizedReadingRequestId || 'UNKNOWN_REQUEST_ID'}:`, error.message, error.stack, error.details);
-    
+
     let errorMessage = "Failed to process audio and start transcription. Please check server logs for details.";
-    
+
     if (error instanceof z.ZodError) {
       errorMessage = `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`;
       console.error("[processAndTranscribeAudioCallable] ZodError:", errorMessage);
       throw new HttpsError("invalid-argument", errorMessage);
     }
-    
-    if (error.code === 'storage/object-not-found') { 
+
+    if (error.code === 'storage/object-not-found') {
       errorMessage = "GCS object not found after upload attempt, or bucket issue.";
     } else if (error.message && (error.message.includes("SpeechClient") || error.message.includes("speech.googleapis.com"))) {
       errorMessage = `Speech API error: ${error.message}`;
-    } else if (error.code && typeof error.code === 'number') { 
+    } else if (error.code && typeof error.code === 'number') {
         errorMessage = `gRPC Error Code ${error.code}: ${error.message || error.details || 'Unknown gRPC error'}`;
     } else if (error.message) {
       errorMessage = error.message;
     }
-    
+
     console.error(`[processAndTranscribeAudioCallable] Determined error message for HttpsError: ${errorMessage}`);
 
     if (data?.personalizedReadingRequestId) {
@@ -560,7 +560,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
             const requestDocRef = adminDb.collection('personalizedReadings').doc(data.personalizedReadingRequestId);
             await requestDocRef.update({
                 transcriptionStatus: 'failed',
-                transcriptionError: errorMessage.substring(0, 500), 
+                transcriptionError: errorMessage.substring(0, 500),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
             console.log(`[processAndTranscribeAudioCallable] Firestore updated with failed status for request ${data.personalizedReadingRequestId}.`);
@@ -570,11 +570,9 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     } else {
         console.warn(`[processAndTranscribeAudioCallable] personalizedReadingRequestId not available in error handler. Cannot update Firestore status.`);
     }
-    
+
     console.log(`[processAndTranscribeAudioCallable] Throwing HttpsError to client with message: ${errorMessage}`);
     throw new HttpsError("internal", errorMessage);
   }
   */
 });
-    
-
