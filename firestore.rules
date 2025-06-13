@@ -4,31 +4,53 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Profiles: Users can read/write their own profile.
-    match /profiles/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    // Helper function to check if the currently authenticated user is a Tassologist
+    function isTassologist() {
+      return request.auth != null && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'tassologist';
     }
 
-    // Readings: Users can read/write their own readings.
-    // Tassologists might need read access to original readings linked to personalized requests.
+    // Helper function to check if the currently authenticated user owns the document (based on a userId field)
+    function isOwner(docUserId) {
+      return request.auth != null && request.auth.uid == docUserId;
+    }
+
+    // Profiles:
+    // - Users can read their own profile.
+    // - Tassologists can read any user's profile (e.g., to see requester details).
+    // - Users can create and update their own profile.
+    match /profiles/{userId} {
+      allow read: if isOwner(userId) || isTassologist();
+      allow create: if isOwner(userId); // Typically, profile creation is linked to signup
+      allow update: if isOwner(userId); // Users can update their own profile
+      allow delete: if false; // Deleting profiles is usually an admin action
+    }
+
+    // Readings:
+    // - Users can read their own readings.
+    // - Tassologists can read any reading, especially original readings linked to personalized requests.
+    // - Users write their own readings (usually via functions).
+    // - Tassologists can update readings if necessary (e.g., if a function updates it based on their input).
     match /readings/{readingId} {
-      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
-      allow get: if request.auth != null && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'tassologist';
+      allow read: if isOwner(resource.data.userId) || isTassologist();
+      allow create: if isOwner(resource.data.userId); // User creates their own reading
+      allow update: if isTassologist() || isOwner(resource.data.userId); // Tassologists or owners can update
+      allow delete: if false;
     }
 
     // PersonalizedReadings:
-    // Users can read/write their own requests.
-    // Tassologists can read/write any request.
+    // - Users can read their own personalized requests.
+    // - Tassologists can read any personalized request.
+    // - Users can create their own requests.
+    // - Tassologists can update any request (e.g., to change status, add interpretation details).
     match /personalizedReadings/{requestId} {
-      allow read, write: if request.auth != null && (
-        request.auth.uid == resource.data.userId ||
-        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'tassologist'
-      );
+      allow read: if isOwner(resource.data.userId) || isTassologist();
+      allow create: if isOwner(resource.data.userId); // User creates their own request
+      allow update: if isTassologist() || isOwner(resource.data.userId); // Tassologists or owners can update
+      allow delete: if false;
     }
 
-    // Mail collection: Generally should be write-only by functions.
-    // Deny client-side read/write for security.
-    match /mail/{mailId} {
+    // Mail: Only accessible by backend/admin processes.
+    match /mail/{document=**} {
       allow read, write: if false;
     }
   }
