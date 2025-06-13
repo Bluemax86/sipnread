@@ -160,6 +160,22 @@ export interface GetTranscriptionResultPayload {
   error?: string;
 }
 
+interface SpeechRecognitionAlternative {
+  transcript?: string;
+  // Other fields like confidence can be added if needed
+}
+
+interface SpeechRecognitionResult {
+  alternatives?: SpeechRecognitionAlternative[];
+  // Other fields like channelTag, languageCode can be added
+}
+
+interface SpeechOperationResponse {
+  results?: SpeechRecognitionResult[];
+  // Other fields from the LongRunningRecognizeResponse
+}
+
+
 export async function getTranscriptionResultAction(
   operationName: string,
   personalizedReadingRequestId: string,
@@ -195,10 +211,10 @@ export async function getTranscriptionResultAction(
         return { success: false, error: operation.error.message || 'Transcription failed.', status: 'failed' };
       }
 
-      const response = operation.response as any; 
+      const response = operation.response as SpeechOperationResponse; 
       if (response && response.results && response.results.length > 0) {
         const transcript = response.results
-          .map((result: any) => result.alternatives?.[0]?.transcript || '')
+          .map((result: SpeechRecognitionResult) => result.alternatives?.[0]?.transcript || '')
           .join('\n');
 
         console.log(`[getTranscriptionResultAction] Transcription complete for ${operationName}. Transcript length: ${transcript.length}`);

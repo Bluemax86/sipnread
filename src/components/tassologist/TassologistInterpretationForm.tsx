@@ -15,7 +15,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { app as firebaseApp } from '@/lib/firebase'; 
-import { getFunctions, httpsCallable, type HttpsCallableResult, type FunctionsError } from 'firebase/functions';
+import { getFunctions, httpsCallable, type FunctionsError } from 'firebase/functions';
 import type { ProcessAndTranscribeAudioCallableInput } from '../../../functions/src';
 
 
@@ -371,3 +371,4 @@ export function TassologistInterpretationForm({
     </Card>
   );
 }
+

@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useAuth, type UserProfile } from '@/contexts/AuthContext';
 import { db, app as firebaseApp } from '@/lib/firebase'; 
-import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions'; 
+import { getFunctions, httpsCallable } from 'firebase/functions'; 
 import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import type { TeaReadingDocument as BaseTeaReadingDocument, RoxyPersonalizedReadingRequest as BaseRoxyPersonalizedReadingRequest, SaveTassologistInterpretationType, TranscriptionStatus } from '../../../actions'; 
 import { getTranscriptionResultAction } from '../../../actions';
@@ -55,7 +55,7 @@ export default function ProcessRequestPage() {
   
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null); // Renamed from error to avoid conflict with catch block variables
   
   const [isFetchingTranscript, setIsFetchingTranscript] = useState(false);
   // Store form values locally to pass to TassologistInterpretationForm
@@ -67,13 +67,13 @@ export default function ProcessRequestPage() {
     if (!requestId || !user || !userProfile || userProfile.role !== 'tassologist') return;
     
     setIsLoadingData(true);
-    setError(null);
+    setPageError(null);
     try {
       const requestDocRef = doc(db, 'personalizedReadings', requestId);
       const requestDocSnap = await getDoc(requestDocRef);
 
       if (!requestDocSnap.exists()) {
-        setError("Personalized reading request not found.");
+        setPageError("Personalized reading request not found.");
         setIsLoadingData(false);
         return;
       }
@@ -108,7 +108,8 @@ export default function ProcessRequestPage() {
 
           // If transcription was pending, try to fetch it now
           if (requestData.transcriptionOperationId && requestData.transcriptionStatus === 'pending' && (!readingData.manualInterpretation || readingData.manualInterpretation.startsWith("[Dictation processing"))) {
-            handleFetchTranscript(requestData.transcriptionOperationId, requestData.id, requestData.originalReadingId);
+            // Do not call handleFetchTranscript directly here to avoid potential infinite loops with useCallback dependencies.
+            // It will be triggered by the currentTranscriptionStatus change if needed, or manually by user.
           }
 
         } else {
@@ -119,64 +120,64 @@ export default function ProcessRequestPage() {
         setFormInitialData({ manualSymbols: [{ symbol: '', position: undefined }], manualInterpretation: '' });
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load request details.");
+      setPageError(err instanceof Error ? err.message : "Failed to load request details.");
     } finally {
       setIsLoadingData(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestId, user, userProfile]); // handleFetchTranscript is not added here to prevent re-fetch loops
+  }, [requestId, user, userProfile]); 
 
   useEffect(() => {
     if (authLoading || loadingProfile) return;
     if (!user || !userProfile || userProfile.role !== 'tassologist') {
-      setError("Access Denied. You must be a Tassologist to view this page.");
+      setPageError("Access Denied. You must be a Tassologist to view this page.");
       setIsLoadingData(false);
       return;
     }
     if (requestId) {
       fetchFullRequestData();
     } else {
-      setError("Request ID is missing.");
+      setPageError("Request ID is missing.");
       setIsLoadingData(false);
     }
   }, [requestId, user, userProfile, authLoading, loadingProfile, fetchFullRequestData]);
 
 
-  const handleFetchTranscript = useCallback(async (operationId?: string | null, currentRequestId?: string | null, currentOriginalReadingId?: string | null) => {
-    const opId = operationId || request?.transcriptionOperationId;
-    const reqId = currentRequestId || request?.id;
-    const origReadingId = currentOriginalReadingId || request?.originalReadingId;
+  const handleFetchTranscript = useCallback(async (operationIdParam?: string | null, currentRequestIdParam?: string | null, currentOriginalReadingIdParam?: string | null) => {
+    const opId = operationIdParam || request?.transcriptionOperationId;
+    const reqId = currentRequestIdParam || request?.id;
+    const origReadingId = currentOriginalReadingIdParam || request?.originalReadingId;
 
     if (!opId || !reqId ) {
       toast({ variant: 'default', title: 'No Dictation', description: 'No dictation was processed for this request.' });
       return;
     }
-    // origReadingId can be null if the tassologist started a dictation without an original AI reading.
-    // In this case, the transcript will be fetched but not saved back to a "readings" document by getTranscriptionResultAction directly.
-    // The TassologistInterpretationForm will still get it.
-
+    
     setIsFetchingTranscript(true);
     toast({ title: 'Checking Dictation...', description: 'Attempting to fetch transcript.' });
     try {
       const result = await getTranscriptionResultAction(opId, reqId, origReadingId || null);
       if (result.success && result.transcript) {
         setFormInitialData(prev => ({ ...prev, manualInterpretation: result.transcript }));
-        setCurrentTranscriptionStatus('completed');
+        setCurrentTranscriptionStatus('completed'); // Update local status
+        // Optionally call fetchFullRequestData to get the latest overall request state from DB if transcriptionStatus update in DB is critical for other UI elements
+        // await fetchFullRequestData(); 
         toast({ title: 'Transcript Fetched!', description: 'Dictation added to interpretation field.' });
       } else if (result.status === 'processing') {
-        setCurrentTranscriptionStatus('pending');
+        setCurrentTranscriptionStatus('pending'); // Update local status
         toast({ title: 'Still Processing', description: 'Dictation is still being transcribed. Please try again in a moment.' });
       } else {
-        setCurrentTranscriptionStatus('failed');
+        setCurrentTranscriptionStatus('failed'); // Update local status
         toast({ variant: 'destructive', title: 'Transcript Error', description: result.error || 'Failed to fetch transcript.' });
       }
-    } catch (error: unknown) {
+    } catch (fetchTranscriptError: unknown) {
       setCurrentTranscriptionStatus('failed');
-      toast({ variant: 'destructive', title: 'Fetch Error', description: 'An error occurred while fetching transcript.' });
+      const description = fetchTranscriptError instanceof Error ? fetchTranscriptError.message : 'An error occurred while fetching transcript.';
+      toast({ variant: 'destructive', title: 'Fetch Error', description });
     } finally {
       setIsFetchingTranscript(false);
     }
-  }, [request, toast]);
+  }, [request, toast]); // fetchFullRequestData removed from dependencies to avoid loops
 
 
   const handleFormSubmit = async (data: TassologistInterpretationFormValues, saveType: SaveTassologistInterpretationType) => {
@@ -209,16 +210,15 @@ export default function ProcessRequestPage() {
         saveType,
       };
       
-      const result: HttpsCallableResult<{ success: boolean; message?: string }> = await saveTassologistInterpretation(payload);
+      await saveTassologistInterpretation(payload); // Direct call to callable, result handled via its own success/message
 
-      if (result.data.success) {
-        toast({ title: "Success!", description: `Interpretation ${saveType === 'complete' ? 'completed and user notified' : 'draft saved'}.` });
-        router.push('/tassologist/dashboard');
-      } else {
-        toast({ variant: "destructive", title: "Save Failed", description: result.data.message || "Could not save interpretation." });
-      }
+      toast({ title: "Success!", description: `Interpretation ${saveType === 'complete' ? 'completed and user notified' : 'draft saved'}.` });
+      router.push('/tassologist/dashboard');
+      
     } catch (err: unknown) {
-      toast({ variant: "destructive", title: "Error", description: err instanceof Error ? err.message : "An unexpected error occurred." });
+      // HttpsError from callable will be caught here
+      const errMessage = err instanceof Error ? (err as any).details?.message || err.message : "An unexpected error occurred.";
+      toast({ variant: "destructive", title: "Error Saving Interpretation", description: errMessage });
     } finally {
       setIsSubmittingForm(false);
     }
@@ -241,13 +241,13 @@ export default function ProcessRequestPage() {
     );
   }
 
-  if (error) {
+  if (pageError) {
     return (
       <div className="container mx-auto min-h-[calc(100vh-56px)] flex flex-col items-center justify-center py-8 px-4">
         <Alert variant="destructive" className="max-w-lg w-full">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{pageError}</AlertDescription>
         </Alert>
         <Button onClick={() => router.push('/tassologist/dashboard')} className="mt-6">
           <ArrowLeft className="mr-2 h-4 w-4" />
@@ -452,10 +452,14 @@ export default function ProcessRequestPage() {
                 onSubmit={handleFormSubmit}
                 isSubmittingForm={isSubmittingForm}
                 initialData={formInitialData}
-                onTranscriptFetched={(transcript) => {
+                onTranscriptFetched={(transcript, fetchedOperationName) => { // operationName added
                     setFormInitialData(prev => ({ ...prev, manualInterpretation: transcript }));
-                    // Potentially re-fetch full data or update local `request` state for transcriptionStatus
-                    fetchFullRequestData(); 
+                    // If the operation name matches the current request's operation ID, update status
+                    if (fetchedOperationName && request?.transcriptionOperationId === fetchedOperationName) {
+                        setCurrentTranscriptionStatus('completed');
+                    }
+                    // Optionally, trigger a full re-fetch if needed:
+                    // fetchFullRequestData(); 
                 }}
                 currentTranscriptionStatus={currentTranscriptionStatus}
              />
@@ -468,3 +472,4 @@ export default function ProcessRequestPage() {
     </div>
   );
 }
+
