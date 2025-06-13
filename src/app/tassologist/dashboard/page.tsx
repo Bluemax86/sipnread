@@ -110,6 +110,9 @@ export default function TassologistDashboardPage() {
   }
 
   const RequestCard = ({ request }: { request: RoxyPersonalizedReadingRequestWithId }) => {
+    const router = useRouter(); // For navigation
+    const { user: authUserFromHook } = useAuth(); // Get user from hook for logging
+
     let badgeVariant: "default" | "secondary" | "outline" = "secondary"; // Default to secondary
     if (request.status === 'new') {
         badgeVariant = 'default';
@@ -145,7 +148,10 @@ export default function TassologistDashboardPage() {
         </CardContent>
         <CardFooter>
             <Button
-            onClick={() => router.push(`/tassologist/request/${request.id}`)}
+            onClick={() => {
+              console.log("[TassologistDashboardPage] 'View and Process' clicked. Current auth user from useAuth():", authUserFromHook);
+              router.push(`/tassologist/request/${request.id}`);
+            }}
             className="w-full"            
             >
             <Eye className="mr-2 h-4 w-4" />
