@@ -148,7 +148,23 @@ export default function TassologistDashboardPage() {
         </CardContent>
         <CardFooter>
             <Button
-            onClick={() => {
+            onClick={async () => {
+              let idToken = "N/A";
+              let tokenPayload = "N/A";
+              let tokenExp = "N/A";
+              if (user) {
+                try {
+                  idToken = await user.getIdToken(true); // Force refresh
+                  const parts = idToken.split('.');
+                  if (parts.length === 3) {
+                    const payload = JSON.parse(atob(parts[1]));
+                    tokenPayload = JSON.stringify(payload, null, 2);
+                    tokenExp = payload.exp ? new Date(payload.exp * 1000).toLocaleString() : "N/A";
+                  }
+                } catch (e) {
+                  idToken = `Error fetching token: ${(e as Error).message}`;
+                }
+              }
               console.log(
                 `[TassologistDashboardPage] 'View and Process' clicked. Auth State:\n` +
                 `  User Object Present: ${!!user}\n` +
@@ -158,7 +174,10 @@ export default function TassologistDashboardPage() {
                 `  User Profile Role: ${userProfile?.role || 'N/A'}\n` +
                 `  User Profile Name: ${userProfile?.name || 'N/A'}\n` +
                 `  Is Tassologist: ${userProfile?.role === 'tassologist'}\n` +
-                `  Full User Profile (JSON): ${JSON.stringify(userProfile, null, 2)}`
+                `  Full User Profile (JSON): ${JSON.stringify(userProfile, null, 2)}\n` +
+                `  ID Token: ${idToken}\n` +
+                `  ID Token Expires: ${tokenExp}\n` +
+                `  ID Token Payload: ${tokenPayload}`
               );
               router.push(`/tassologist/request/${request.id}`);
             }}
