@@ -310,7 +310,7 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
       newStatus = 'completed';
       requestUpdates.completionDate = currentTime;
       const currentRequestSnap = await requestDocRef.get();
-      if (currentRequestSnap.exists()) {
+      if (currentRequestSnap.exists) {
         const currentRequestData = currentRequestSnap.data();
         if (currentRequestData?.transcriptionStatus === 'pending') {
           requestUpdates.transcriptionStatus = 'completed';
@@ -381,7 +381,7 @@ export const markPersonalizedReadingAsReadCallable = onCall(async (request) => {
     const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
     const requestDocSnap = await requestDocRef.get();
 
-    if (!requestDocSnap.exists()) {
+    if (!requestDocSnap.exists) {
       throw new HttpsError("not-found", "Personalized reading request not found.");
     }
 

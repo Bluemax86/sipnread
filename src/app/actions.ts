@@ -5,8 +5,9 @@
 import { analyzeTeaLeafPatterns, type AnalyzeTeaLeafPatternsInput, type AnalyzeTeaLeafPatternsOutput } from '@/ai/flows/analyze-tea-leaf-patterns';
 import { Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app as firebaseApp, db } from '@/lib/firebase'; 
-import { SpeechClient } from '@google-cloud/speech'; 
+import { app as firebaseApp, db } from '@/lib/firebase';
+import { SpeechClient } from '@google-cloud/speech';
+import type { protos } from '@google-cloud/speech'; // Import protos for type safety
 
 import type {
   SubmitRoxyReadingRequestCallableInput,
@@ -27,20 +28,20 @@ export interface AiSymbol {
 
 export interface StoredManualSymbol {
   symbolName: string;
-  truePositionInCup: string; 
+  truePositionInCup: string;
 }
 
 export interface TeaReadingDocument {
   userId: string;
-  readingDate: Timestamp; 
+  readingDate: Timestamp;
   photoStorageUrls: string[];
-  aiSymbolsDetected: AiSymbol[]; 
+  aiSymbolsDetected: AiSymbol[];
   aiInterpretation: string;
   userQuestion?: string;
-  userSymbolNames?: string[]; 
-  manualSymbolsDetected: StoredManualSymbol[]; 
-  manualInterpretation: string; 
-  updatedAt?: Timestamp; 
+  userSymbolNames?: string[];
+  manualSymbolsDetected: StoredManualSymbol[];
+  manualInterpretation: string;
+  updatedAt?: Timestamp;
 }
 
 export interface MailDocument {
@@ -50,7 +51,7 @@ export interface MailDocument {
     html: string;
     text?: string;
   };
-  createdAt?: Timestamp; 
+  createdAt?: Timestamp;
 }
 
 export type TranscriptionStatus = 'not_requested' | 'pending' | 'completed' | 'failed' | null;
@@ -58,19 +59,19 @@ export type TranscriptionStatus = 'not_requested' | 'pending' | 'completed' | 'f
 export interface RoxyPersonalizedReadingRequest {
   userId: string;
   userEmail: string;
-  originalReadingId?: string | null; 
-  requestDate: Timestamp; 
+  originalReadingId?: string | null;
+  requestDate: Timestamp;
   status: 'new' | 'in-progress' | 'completed' | 'cancelled' | 'read';
   price: number;
   paymentStatus: 'pending';
   userSatisfaction?: 'happy' | 'neutral' | 'unhappy' | null;
-  completionDate?: Timestamp; 
+  completionDate?: Timestamp;
   tassologistId?: string;
-  updatedAt?: Timestamp; 
+  updatedAt?: Timestamp;
   dictatedAudioGcsUri?: string | null;
   transcriptionOperationId?: string | null;
   transcriptionStatus?: TranscriptionStatus;
-  transcriptionError?: string | null; 
+  transcriptionError?: string | null;
 }
 
 export interface AiAnalysisResult {
@@ -116,9 +117,9 @@ export async function getTeaLeafAiAnalysisAction(
     return {
       aiSymbolsDetected: aiResult.aiSymbolsDetected,
       aiInterpretation: aiResult.aiInterpretation,
-      imageStorageUrls: imageStorageUrls, 
-      userQuestion: (userQuestion && userQuestion.trim() !== '') ? userQuestion : null, 
-      userSymbolNames: (userSymbolNames && userSymbolNames.length > 0) ? userSymbolNames.filter(name => name.trim() !== '') : null, 
+      imageStorageUrls: imageStorageUrls,
+      userQuestion: (userQuestion && userQuestion.trim() !== '') ? userQuestion : null,
+      userSymbolNames: (userSymbolNames && userSymbolNames.length > 0) ? userSymbolNames.filter(name => name.trim() !== '') : null,
     };
 
   } catch (e: unknown) {
@@ -147,59 +148,48 @@ export async function getTeaLeafAiAnalysisAction(
 export async function startTranscriptionForRequestAction(
 ): Promise<{ success: boolean; operationId?: string; error?: string; }> {
   console.warn("[startTranscriptionForRequestAction DEPRECATED] This action is deprecated. Use the 'processAndTranscribeAudioCallable' Firebase Function to start transcription, and 'getTranscriptionResultAction' to poll.");
-  return { 
-    success: false, 
-    error: "This action (startTranscriptionForRequestAction) is deprecated. Use processAndTranscribeAudioCallable Firebase Function." 
+  return {
+    success: false,
+    error: "This action (startTranscriptionForRequestAction) is deprecated. Use processAndTranscribeAudioCallable Firebase Function."
   };
 }
 
 export interface GetTranscriptionResultPayload {
   success: boolean;
   transcript?: string;
-  status?: 'processing' | 'completed' | 'failed' | 'not_found'; 
+  status?: 'processing' | 'completed' | 'failed' | 'not_found';
   error?: string;
 }
 
-interface SpeechRecognitionAlternative {
-  transcript?: string;
-  // Other fields like confidence can be added if needed
-}
-
-interface SpeechRecognitionResult {
-  alternatives?: SpeechRecognitionAlternative[];
-  // Other fields like channelTag, languageCode can be added
-}
-
-interface SpeechOperationResponse {
-  results?: SpeechRecognitionResult[];
-  // Other fields from the LongRunningRecognizeResponse
-}
-
+// Using IRecognitionAudio and IRecognitionConfig from protos for better type safety if needed.
+// For SpeechOperationResponse, we use protos.google.longrunning.IOperation which is what checkLongRunningRecognizeProgress returns.
+// If more specific result types are needed, they can be defined from protos.google.cloud.speech.v1.
 
 export async function getTranscriptionResultAction(
   operationName: string,
   personalizedReadingRequestId: string,
-  originalReadingId: string | null 
+  originalReadingId: string | null
 ): Promise<GetTranscriptionResultPayload> {
   if (!operationName || !personalizedReadingRequestId) {
     return { success: false, error: "Operation name and personalized reading request ID are required.", status: 'failed' };
   }
-  
+
   const speechClient = new SpeechClient();
   try {
     console.log(`[getTranscriptionResultAction] Checking operation: ${operationName}`);
-    const [operation] = await speechClient.getOperation({ name: operationName });
+    // Use checkLongRunningRecognizeProgress for a more direct API
+    const operation: protos.google.longrunning.IOperation = await speechClient.checkLongRunningRecognizeProgress(operationName);
 
-    if (!operation) {
-      console.warn(`[getTranscriptionResultAction] Operation ${operationName} not found.`);
+    if (!operation) { // Should not happen if operationName is valid, as an error would likely be thrown by the client
+      console.warn(`[getTranscriptionResultAction] Operation ${operationName} not found by client library (unexpected).`);
        await updateDoc(doc(db, 'personalizedReadings', personalizedReadingRequestId), {
         transcriptionStatus: 'failed',
-        transcriptionError: 'Operation not found by client action.',
+        transcriptionError: 'Operation not found by client action (checkLongRunningRecognizeProgress).',
         updatedAt: Timestamp.now(),
       });
       return { success: false, error: 'Transcription operation not found.', status: 'not_found' };
     }
-    
+
     if (operation.done) {
       if (operation.error) {
         console.error(`[getTranscriptionResultAction] Operation ${operationName} failed:`, operation.error);
@@ -211,10 +201,13 @@ export async function getTranscriptionResultAction(
         return { success: false, error: operation.error.message || 'Transcription failed.', status: 'failed' };
       }
 
-      const response = operation.response as SpeechOperationResponse; 
-      if (response && response.results && response.results.length > 0) {
-        const transcript = response.results
-          .map((result: SpeechRecognitionResult) => result.alternatives?.[0]?.transcript || '')
+      // The response for speech.projects.operations is google.cloud.speech.v1.LongRunningRecognizeResponse
+      // We need to cast operation.response to this type.
+      const speechResponse = operation.response as protos.google.cloud.speech.v1.LongRunningRecognizeResponse;
+
+      if (speechResponse && speechResponse.results && speechResponse.results.length > 0) {
+        const transcript = speechResponse.results
+          .map((result: protos.google.cloud.speech.v1.ISpeechRecognitionResult) => result.alternatives?.[0]?.transcript || '')
           .join('\n');
 
         console.log(`[getTranscriptionResultAction] Transcription complete for ${operationName}. Transcript length: ${transcript.length}`);
@@ -222,7 +215,7 @@ export async function getTranscriptionResultAction(
         if (originalReadingId) {
             const readingDocRef = doc(db, 'readings', originalReadingId);
             await updateDoc(readingDocRef, {
-              manualInterpretation: transcript, 
+              manualInterpretation: transcript,
               updatedAt: Timestamp.now(),
             });
             console.log(`[getTranscriptionResultAction] Reading document ${originalReadingId} updated with transcript.`);
@@ -241,14 +234,21 @@ export async function getTranscriptionResultAction(
       } else {
          console.warn(`[getTranscriptionResultAction] Operation ${operationName} done but no transcript found in response.`);
          await updateDoc(doc(db, 'personalizedReadings', personalizedReadingRequestId), {
-          transcriptionStatus: 'failed', 
+          transcriptionStatus: 'failed',
           transcriptionError: 'Transcription completed but no text was recognized.',
           updatedAt: Timestamp.now(),
         });
-        return { success: false, error: 'Transcription completed but no text was recognized.', status: 'completed' }; 
+        return { success: false, error: 'Transcription completed but no text was recognized.', status: 'completed' };
       }
     } else {
       console.log(`[getTranscriptionResultAction] Operation ${operationName} still processing.`);
+      // Update status in Firestore to 'pending' if it wasn't already, or just confirm it.
+      // This might be redundant if the callable function already set it to pending.
+      // Consider if this update is necessary or if client should just retry.
+      await updateDoc(doc(db, 'personalizedReadings', personalizedReadingRequestId), {
+        transcriptionStatus: 'pending',
+        updatedAt: Timestamp.now(),
+      });
       return { success: false, status: 'processing', error: 'Transcription is still in progress.' };
     }
   } catch (error: unknown) {
@@ -257,7 +257,7 @@ export async function getTranscriptionResultAction(
      try {
       await updateDoc(doc(db, 'personalizedReadings', personalizedReadingRequestId), {
         transcriptionStatus: 'failed',
-        transcriptionError: errorMessage,
+        transcriptionError: errorMessage.substring(0, 500), // Limit error message length
         updatedAt: Timestamp.now(),
       });
     } catch (updateError) {
@@ -317,7 +317,7 @@ export interface ManualSymbolInput {
 export async function saveTassologistInterpretationAction(
   requestId: string,
   originalReadingId: string,
-  manualSymbols: ManualSymbolInput[], 
+  manualSymbols: ManualSymbolInput[],
   manualInterpretation: string,
   saveType: SaveTassologistInterpretationType
 ): Promise<{ success: boolean; error?: string }> {
@@ -338,7 +338,7 @@ export async function saveTassologistInterpretationAction(
     const payload: SaveTassologistInterpretationCallableInput = {
       requestId,
       originalReadingId,
-      manualSymbols, 
+      manualSymbols,
       manualInterpretation,
       saveType,
     };
