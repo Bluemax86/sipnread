@@ -105,5 +105,48 @@
   body {
     @apply text-foreground;
     background-color: hsl(var(--background));
+    min-height: 100vh; /* Ensure body covers full viewport height */
+    position: relative; /* For positioning pseudo-elements */
+    overflow-x: hidden; /* Prevent horizontal scroll if shapes peek out too far */
+  }
+
+  body::before,
+  body::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px); /* Heavy blur for soft edges */
+    opacity: 0.12; /* Subtle opacity */
+    z-index: -1; /* Behind all content */
+    pointer-events: none; /* Don't interfere with mouse events */
+  }
+
+  body::before {
+    width: 60vw; /* Responsive size based on viewport width */
+    height: 60vw;
+    /* Using a very light version of primary: HSL(43, 68.8%, 56%) -> HSL(43 100% 94%) for very light gold/yellow */
+    background: hsl(43 100% 94%); 
+    top: -20vw; /* Positioned top-left, partially off-screen */
+    left: -20vw;
+    animation: subtleFloat 25s ease-in-out infinite alternate;
+  }
+
+  body::after {
+    width: 55vw; /* Slightly different size/shape */
+    height: 55vw;
+    /* Using a very light version of secondary: HSL(30, 36%, 62%) -> HSL(30 80% 93%) for very light tan */
+    background: hsl(30 80% 93%);
+    bottom: -25vw; /* Positioned bottom-right, partially off-screen */
+    right: -15vw;
+    animation: subtleFloat 30s ease-in-out infinite alternate-reverse;
+  }
+
+  @keyframes subtleFloat {
+    0% {
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      transform: translate(10px, 15px) scale(1.05);
+    }
   }
 }
