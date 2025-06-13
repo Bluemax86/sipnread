@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useAuth, type UserProfile } from '@/contexts/AuthContext';
 import { db, app as firebaseApp } from '@/lib/firebase'; 
-import { getFunctions, httpsCallable, type FunctionsError } from 'firebase/functions'; 
+import { getFunctions, httpsCallable } from 'firebase/functions'; 
 import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import type { TeaReadingDocument as BaseTeaReadingDocument, RoxyPersonalizedReadingRequest as BaseRoxyPersonalizedReadingRequest, SaveTassologistInterpretationType, TranscriptionStatus } from '../../../actions'; 
 import { getTranscriptionResultAction } from '../../../actions';
