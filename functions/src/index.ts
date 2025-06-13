@@ -11,8 +11,8 @@
 import { HttpsError, onCall, type HttpsOptions } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { z } from "zod";
-import { SpeechClient } from '@google-cloud/speech';
-import { Storage } from '@google-cloud/storage';
+// import { SpeechClient } from '@google-cloud/speech'; // Commented out as speechClient is unused
+// import { Storage } from '@google-cloud/storage'; // Commented out as storage is unused
 
 // Initialize Firebase Admin SDK
 if (admin.apps.length === 0) {
@@ -22,8 +22,10 @@ if (admin.apps.length === 0) {
 const adminDb = admin.firestore();
 
 // SDK Clients - Initialize them once globally.
-let speechClient: SpeechClient;
-let storage: Storage;
+// let speechClient: SpeechClient; // Commented out as unused
+// let storage: Storage; // Commented out as unused
+
+/* // Commenting out the try-catch block for SpeechClient initialization as it's unused
 try {
     console.log('[Global Init] Attempting to initialize SpeechClient...');
     // speechClient = new SpeechClient(); // Commented out as it's unused in current simplified logic
@@ -33,7 +35,9 @@ try {
     const stack = e instanceof Error ? e.stack : undefined;
     console.error('[Global Init] CRITICAL: Failed to initialize SpeechClient:', message, stack);
 }
+*/
 
+/* // Commenting out the try-catch block for Storage client initialization as it's unused
 try {
     console.log('[Global Init] Attempting to initialize Storage client...');
     // storage = new Storage(); // Commented out as it's unused in current simplified logic
@@ -43,6 +47,7 @@ try {
     const stack = e instanceof Error ? e.stack : undefined;
     console.error('[Global Init] CRITICAL: Failed to initialize Storage client:', message, stack);
 }
+*/
 
 
 // Zod schema for input validation for updateUserProfileCallable
@@ -67,7 +72,7 @@ export const updateUserProfileCallable = onCall(async (request) => {
     const validatedData = UpdateUserProfileCallableInputSchema.parse(data);
 
     const profileRef = adminDb.collection("profiles").doc(userId);
-    const updatePayload: Record<string, any> = {
+    const updatePayload: Record<string, unknown> = { // Changed any to unknown
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
@@ -210,7 +215,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
       console.warn("[submitRoxyReadingRequestCallable] No tassologist found. Request will be created without assignment.");
     }
 
-    const requestDocData: Record<string, any> = {
+    const requestDocData: Record<string, unknown> = { // Changed any to unknown
       userId,
       userEmail: validatedData.userEmail,
       requestDate: admin.firestore.FieldValue.serverTimestamp(),
@@ -311,7 +316,7 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
 
     const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
     let newStatus: 'in-progress' | 'completed' = 'in-progress';
-    const requestUpdates: Record<string, any> = { updatedAt: currentTime, transcriptionError: null };
+    const requestUpdates: Record<string, unknown> = { updatedAt: currentTime, transcriptionError: null }; // Changed any to unknown
 
     if (validatedData.saveType === 'complete') {
       newStatus = 'completed';
@@ -455,7 +460,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error in simplified logic";
     const errorStack = error instanceof Error ? error.stack : undefined;
-    const errorDetails = (error as any)?.details; // Using 'as any' for unknown error structure
+    const errorDetails = (typeof error === 'object' && error !== null && 'details' in error) ? (error as { details: unknown }).details : undefined;
     console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR (Simplified Debugging Catch) for Tassologist ${tassologistId}, request ${data?.personalizedReadingRequestId || 'UNKNOWN_REQUEST_ID'}:`, errorMessage, errorStack, errorDetails);
     console.error(`[processAndTranscribeAudioCallable] RAW ERROR OBJECT (Simplified Debugging Catch):`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
     throw new HttpsError("internal", "Simplified function encountered an error: " + errorMessage);
@@ -547,7 +552,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     const requestIdForError = (callableRequest?.data as ProcessAndTranscribeAudioCallableInput | undefined)?.personalizedReadingRequestId || 'UNKNOWN_REQUEST_ID';
 
     console.error(`[processAndTranscribeAudioCallable] RAW ERROR OBJECT:`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
-    console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR for Tassologist ${tassologistIdForError}, request ${requestIdForError}:`, (error as Error).message, (error as Error).stack, (error as any).details);
+    console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR for Tassologist ${tassologistIdForError}, request ${requestIdForError}:`, (error as Error).message, (error as Error).stack, (error as {details?: unknown}).details);
 
     let errorMessage = "Failed to process audio and start transcription. Please check server logs for details.";
 
@@ -557,7 +562,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
       throw new HttpsError("invalid-argument", errorMessage);
     }
     
-    const gcpError = error as any; // Using 'as any' to access potential gRPC/GCP specific error codes/messages
+    const gcpError = error as {code?: string | number; message?: string; details?: string}; // Using 'as any' to access potential gRPC/GCP specific error codes/messages
 
     if (gcpError.code === 'storage/object-not-found') {
       errorMessage = "GCS object not found after upload attempt, or bucket issue.";
@@ -595,4 +600,5 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
   }
   */
 });
+
 
