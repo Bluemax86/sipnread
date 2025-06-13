@@ -178,9 +178,11 @@ export async function getTranscriptionResultAction(
   try {
     console.log(`[getTranscriptionResultAction] Checking operation: ${operationName}`);
     // Use checkLongRunningRecognizeProgress for a more direct API
-    const operation: protos.google.longrunning.IOperation = await speechClient.checkLongRunningRecognizeProgress(operationName);
+    // Let TypeScript infer the type of 'operation' as it might be a more specific
+    // LROperation wrapper from google-gax, not just protos.google.longrunning.IOperation.
+    const operation = await speechClient.checkLongRunningRecognizeProgress(operationName);
 
-    if (!operation) { // Should not happen if operationName is valid, as an error would likely be thrown by the client
+    if (!operation) { 
       console.warn(`[getTranscriptionResultAction] Operation ${operationName} not found by client library (unexpected).`);
        await updateDoc(doc(db, 'personalizedReadings', personalizedReadingRequestId), {
         transcriptionStatus: 'failed',
@@ -201,9 +203,9 @@ export async function getTranscriptionResultAction(
         return { success: false, error: operation.error.message || 'Transcription failed.', status: 'failed' };
       }
 
-      // The response for speech.projects.operations is google.cloud.speech.v1.LongRunningRecognizeResponse
-      // We need to cast operation.response to this type.
-      const speechResponse = operation.response as protos.google.cloud.speech.v1.LongRunningRecognizeResponse;
+      // Access the result using operation.result, which is typical for GAX LROperation objects.
+      // The result type should be protos.google.cloud.speech.v1.ILongRunningRecognizeResponse | undefined
+      const speechResponse = operation.result;
 
       if (speechResponse && speechResponse.results && speechResponse.results.length > 0) {
         const transcript = speechResponse.results
@@ -232,7 +234,7 @@ export async function getTranscriptionResultAction(
 
         return { success: true, transcript: transcript, status: 'completed' };
       } else {
-         console.warn(`[getTranscriptionResultAction] Operation ${operationName} done but no transcript found in response.`);
+         console.warn(`[getTranscriptionResultAction] Operation ${operationName} done but no transcript found in response (operation.result was falsy or empty).`);
          await updateDoc(doc(db, 'personalizedReadings', personalizedReadingRequestId), {
           transcriptionStatus: 'failed',
           transcriptionError: 'Transcription completed but no text was recognized.',
@@ -242,9 +244,6 @@ export async function getTranscriptionResultAction(
       }
     } else {
       console.log(`[getTranscriptionResultAction] Operation ${operationName} still processing.`);
-      // Update status in Firestore to 'pending' if it wasn't already, or just confirm it.
-      // This might be redundant if the callable function already set it to pending.
-      // Consider if this update is necessary or if client should just retry.
       await updateDoc(doc(db, 'personalizedReadings', personalizedReadingRequestId), {
         transcriptionStatus: 'pending',
         updatedAt: Timestamp.now(),
@@ -257,7 +256,7 @@ export async function getTranscriptionResultAction(
      try {
       await updateDoc(doc(db, 'personalizedReadings', personalizedReadingRequestId), {
         transcriptionStatus: 'failed',
-        transcriptionError: errorMessage.substring(0, 500), // Limit error message length
+        transcriptionError: errorMessage.substring(0, 500), 
         updatedAt: Timestamp.now(),
       });
     } catch (updateError) {
