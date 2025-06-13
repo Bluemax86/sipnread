@@ -161,10 +161,6 @@ export interface GetTranscriptionResultPayload {
   error?: string;
 }
 
-// Using IRecognitionAudio and IRecognitionConfig from protos for better type safety if needed.
-// For SpeechOperationResponse, we use protos.google.longrunning.IOperation which is what checkLongRunningRecognizeProgress returns.
-// If more specific result types are needed, they can be defined from protos.google.cloud.speech.v1.
-
 export async function getTranscriptionResultAction(
   operationName: string,
   personalizedReadingRequestId: string,
@@ -177,9 +173,7 @@ export async function getTranscriptionResultAction(
   const speechClient = new SpeechClient();
   try {
     console.log(`[getTranscriptionResultAction] Checking operation: ${operationName}`);
-    // Use checkLongRunningRecognizeProgress for a more direct API
-    // Let TypeScript infer the type of 'operation' as it might be a more specific
-    // LROperation wrapper from google-gax, not just protos.google.longrunning.IOperation.
+    
     const operation = await speechClient.checkLongRunningRecognizeProgress(operationName);
 
     if (!operation) { 
@@ -203,9 +197,7 @@ export async function getTranscriptionResultAction(
         return { success: false, error: operation.error.message || 'Transcription failed.', status: 'failed' };
       }
 
-      // Access the result using operation.result, which is typical for GAX LROperation objects.
-      // The result type should be protos.google.cloud.speech.v1.ILongRunningRecognizeResponse | undefined
-      const speechResponse = operation.result;
+      const speechResponse = operation.result as protos.google.cloud.speech.v1.ILongRunningRecognizeResponse | null;
 
       if (speechResponse && speechResponse.results && speechResponse.results.length > 0) {
         const transcript = speechResponse.results
