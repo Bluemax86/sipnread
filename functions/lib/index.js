@@ -302,12 +302,15 @@ exports.saveTassologistInterpretationCallable = (0, https_1.onCall)(async (reque
         });
         const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
         let newStatus = 'in-progress';
-        const requestUpdates = { updatedAt: currentTime, transcriptionError: null }; // Changed any to unknown
+        const requestUpdates = {
+            updatedAt: currentTime,
+            transcriptionError: null
+        };
         if (validatedData.saveType === 'complete') {
             newStatus = 'completed';
             requestUpdates.completionDate = currentTime;
             const currentRequestSnap = await requestDocRef.get();
-            if (currentRequestSnap.exists()) {
+            if (currentRequestSnap.exists) { // Corrected: .exists is a property
                 const currentRequestData = currentRequestSnap.data();
                 if (currentRequestData?.transcriptionStatus === 'pending') {
                     requestUpdates.transcriptionStatus = 'completed';
@@ -371,7 +374,7 @@ exports.markPersonalizedReadingAsReadCallable = (0, https_1.onCall)(async (reque
         const validatedData = MarkPersonalizedReadingAsReadCallableInputSchema.parse(data);
         const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
         const requestDocSnap = await requestDocRef.get();
-        if (!requestDocSnap.exists()) {
+        if (!requestDocSnap.exists) { // Corrected: .exists is a property
             throw new https_1.HttpsError("not-found", "Personalized reading request not found.");
         }
         const requestData = requestDocSnap.data();
