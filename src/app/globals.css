@@ -115,29 +115,27 @@
     content: '';
     position: absolute;
     border-radius: 50%;
-    filter: blur(70px); /* Reduced blur */
-    opacity: 0.25; /* Increased opacity */
+    filter: blur(60px); /* Adjusted blur */
+    opacity: 0.35; /* Adjusted opacity */
     z-index: -1; /* Behind all content */
     pointer-events: none; /* Don't interfere with mouse events */
   }
 
   body::before {
-    width: 60vw; /* Responsive size based on viewport width */
-    height: 60vw;
-    /* Using a less light version of primary: HSL(43, 100%, 80%) */
-    background: hsl(43 100% 80%); 
-    top: -20vw; /* Positioned top-left, partially off-screen */
-    left: -20vw;
+    width: 65vw; /* Adjusted size */
+    height: 65vw; /* Adjusted size */
+    background: hsl(200 60% 85%); /* Light Sky Blue (from --chart-3: 200 60% 65%) */
+    top: -15vw; /* Adjusted position for overlap */
+    left: -10vw; /* Adjusted position for overlap */
     animation: subtleFloat 25s ease-in-out infinite alternate;
   }
 
   body::after {
-    width: 55vw; /* Slightly different size/shape */
-    height: 55vw;
-    /* Using a less light version of secondary: HSL(30, 80%, 78%) */
-    background: hsl(30 80% 78%);
-    bottom: -25vw; /* Positioned bottom-right, partially off-screen */
-    right: -15vw;
+    width: 60vw; /* Adjusted size */
+    height: 60vw; /* Adjusted size */
+    background: hsl(140 40% 82%); /* Light Muted Green (from --chart-4: 140 40% 60%) */
+    bottom: -10vw; /* Adjusted position for overlap */
+    right: -15vw; /* Adjusted position for overlap */
     animation: subtleFloat 30s ease-in-out infinite alternate-reverse;
   }
 
