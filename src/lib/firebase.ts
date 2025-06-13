@@ -20,14 +20,6 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Log the config to ensure it's being picked up correctly on the client
-if (typeof window !== 'undefined') {
-  console.log('[FirebaseContext] Initializing Firebase with config:', firebaseConfig);
-  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-    console.error('[FirebaseContext] CRITICAL: Firebase API Key or Project ID is missing from the config. Login will likely fail. Check .env.local and NEXT_PUBLIC_ prefixes.');
-  }
-}
-
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
