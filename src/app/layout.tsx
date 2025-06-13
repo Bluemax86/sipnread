@@ -18,8 +18,8 @@ export default function RootLayout({
         <title>Sip-n-Read</title>
         <meta name="description" content="Unveil your destiny, one sip at a time." />
         {/* <link rel="manifest" href="/manifest.json" /> */}
-        <link rel="icon" href="/swirl-logo.png" data-ai-hint="logo swirl" type="image/png" />
-        <link rel="apple-touch-icon" href="/swirl-logo.png" data-ai-hint="logo swirl" />
+        <link rel="icon" href="/7_Logo.svg" data-ai-hint="7 logo" type="image/png" />
+        <link rel="apple-touch-icon" href="/7_Logo.jpg" data-ai-hint="7 logo" />
         
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
