@@ -19,7 +19,7 @@ export default function RootLayout({
         <meta name="description" content="Unveil your destiny, one sip at a time." />
         {/* <link rel="manifest" href="/manifest.json" /> */}
         <link rel="icon" href="/swirl-logo.png" data-ai-hint="logo swirl" type="image/png" />
-        <link rel="apple-touch-icon" href="https://placehold.co/180x180.png" data-ai-hint="cup logo" />
+        <link rel="apple-touch-icon" href="/swirl-logo.png" data-ai-hint="logo swirl" />
         
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
