@@ -105,8 +105,8 @@ export default function LandingPage() {
         <Image 
           src="/swirl-logo.png" 
           alt="SipnRead Swirl Logo" 
-          width={64} 
-          height={64} 
+          width={77} 
+          height={77} 
           className="mx-auto mb-4"
           data-ai-hint="logo swirl"
         />
