@@ -1,0 +1,108 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 94%; /* Light Gray from #EFECEC */
+    --foreground: 210 4% 26%; /* Dark Gray from #404348 */
+
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 210 4% 26%; /* Dark Gray */
+
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 210 4% 26%; /* Dark Gray */
+
+    --primary: 43 68.8% 56%; /* Yellow/Gold from #FFB81D */
+    --primary-foreground: 210 4% 20%; /* Dark Gray (for text on primary) */
+
+    --secondary: 30 36% 62%; /* Tan from #C89C76 */
+    --secondary-foreground: 210 4% 20%; /* Dark Gray (for text on secondary) */
+
+    --muted: 0 0% 90%; /* Slightly darker Light Gray */
+    --muted-foreground: 210 4% 45%; /* Medium Gray for text on muted */
+
+    --accent: 43 85% 60%; /* Vibrant, slightly lighter Gold for accents */
+    --accent-foreground: 210 4% 20%; /* Dark Gray */
+
+    --destructive: 0 84% 60%; 
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 85%; /* Gray border */
+    --input: 0 0% 98%; /* Off-white for inputs */
+    --ring: 43 100% 65%; /* Lighter Gold for focus rings */
+
+    --chart-1: 43 100% 56%; /* Primary Gold */
+    --chart-2: 30 60% 92%;  /* More subtle Peachy Tan */
+    --chart-3: 200 60% 65%; /* Sky Blue */
+    --chart-4: 140 40% 60%; /* Muted Green */
+    --chart-5: 210 30% 70%; /* Light Blue-Gray */
+    --radius: 0.5rem;
+
+    /* Sidebar variables for the new light theme */
+    --sidebar-background: 0 0% 92%; /* Slightly darker than main bg for definition */
+    --sidebar-foreground: 210 4% 26%; /* Dark Gray */
+    --sidebar-primary: 43 100% 53%; /* Slightly deeper primary for sidebar */
+    --sidebar-primary-foreground: 210 4% 20%; /* Dark Gray */
+    --sidebar-accent: 43 85% 58%; /* Sidebar accent */
+    --sidebar-accent-foreground: 210 4% 20%; /* Dark Gray */
+    --sidebar-border: 0 0% 82%; /* Sidebar border */
+    --sidebar-ring: 43 100% 65%; /* Lighter Gold */
+  }
+
+  .dark {
+    /* These are the original dark theme variables, kept for potential future use or OS-level dark mode. */
+    --background: 0 0% 10%; 
+    --foreground: 0 0% 90%; 
+
+    --card: 0 0% 15%; 
+    --card-foreground: 0 0% 90%; 
+
+    --popover: 0 0% 15%; 
+    --popover-foreground: 0 0% 90%; 
+
+    --primary: 240 90% 65%; 
+    --primary-foreground: 240 10% 10%; 
+
+    --secondary: 0 0% 25%; 
+    --secondary-foreground: 0 0% 85%; 
+
+    --muted: 0 0% 20%; 
+    --muted-foreground: 0 0% 60%; 
+
+    --accent: 174 70% 65%; 
+    --accent-foreground: 174 70% 10%; 
+
+    --destructive: 0 60% 50%; 
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 30%; 
+    --input: 0 0% 22%; 
+    --ring: 240 90% 65%; 
+    
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+
+    --sidebar-background: 0 0% 12%;
+    --sidebar-foreground: 0 0% 85%;
+    --sidebar-primary: 240 90% 65%;
+    --sidebar-primary-foreground: 240 10% 10%;
+    --sidebar-accent: 174 70% 55%; 
+    --sidebar-accent-foreground: 174 70% 90%;
+    --sidebar-border: 0 0% 20%;
+    --sidebar-ring: 240 90% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

@@ -1,0 +1,72 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+**/node_modules/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+**/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+/storage.rules
+
+.genkit/*
+.env*
+
+# firebase
+.firebase/
+firebase-debug.log
+<<<<<<< HEAD
+<<<<<<< HEAD
+firestore-debug.log
+
+#API Keys
+sipnread-google-speech-service-account-key.json
+=======
+firestore-debug.log
+>>>>>>> 7d3cda9 (initial scaffold)
+=======
+firebase.storage.rules
+firestore-debug.log
+firestore.rules
+
+# If you specifically track your functions/ source but not their builds:
+# For example, if 'functions' is part of your deploy, but its own 'node_modules' and '.next' are not.
+# These rules might be redundant if the **/node_modules/ and **/.next/ are already working correctly
+# but they provide extra explicit clarity and safety for deeply nested build outputs.
+.firebase/sipnread/functions/node_modules/ # <--- ADD THIS specific path (if not caught by generic)
+.firebase/sipnread/functions/.next/        # <--- ADD THIS specific path (if not caught by generic)
+
+#API Keys
+sipnread-google-speech-service-account-key.json
+>>>>>>> ea9c62a (can you change the color of the book icon and Sip-n-Read in the header t)
