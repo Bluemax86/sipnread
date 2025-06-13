@@ -26,18 +26,22 @@ let speechClient: SpeechClient;
 let storage: Storage;
 try {
     console.log('[Global Init] Attempting to initialize SpeechClient...');
-    speechClient = new SpeechClient();
-    console.log('[Global Init] SpeechClient initialized successfully.');
-} catch (e: any) {
-    console.error('[Global Init] CRITICAL: Failed to initialize SpeechClient:', e.message, e.stack);
+    // speechClient = new SpeechClient(); // Commented out as it's unused in current simplified logic
+    console.log('[Global Init] SpeechClient initialization skipped (currently unused).');
+} catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack : undefined;
+    console.error('[Global Init] CRITICAL: Failed to initialize SpeechClient:', message, stack);
 }
 
 try {
     console.log('[Global Init] Attempting to initialize Storage client...');
-    storage = new Storage();
-    console.log('[Global Init] Storage client initialized successfully.');
-} catch (e: any) {
-    console.error('[Global Init] CRITICAL: Failed to initialize Storage client:', e.message, e.stack);
+    // storage = new Storage(); // Commented out as it's unused in current simplified logic
+    console.log('[Global Init] Storage client initialization skipped (currently unused).');
+} catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack : undefined;
+    console.error('[Global Init] CRITICAL: Failed to initialize Storage client:', message, stack);
 }
 
 
@@ -92,12 +96,13 @@ export const updateUserProfileCallable = onCall(async (request) => {
     await profileRef.update(updatePayload);
     return { success: true, message: "Profile updated successfully." };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`[updateUserProfileCallable] Error updating profile for user ${userId}:`, error);
     if (error instanceof z.ZodError) {
       throw new HttpsError("invalid-argument", `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`);
     }
-    throw new HttpsError("internal", error.message || "Failed to update profile.");
+    const message = error instanceof Error ? error.message : "Failed to update profile.";
+    throw new HttpsError("internal", message);
   }
 });
 
@@ -164,12 +169,13 @@ export const saveReadingDataCallable = onCall(async (request) => {
 
     return { success: true, readingId: readingRef.id, message: "Reading saved successfully." };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`[saveReadingDataCallable] Error saving reading for user ${userId}:`, error);
     if (error instanceof z.ZodError) {
       throw new HttpsError("invalid-argument", `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`);
     }
-    throw new HttpsError("internal", error.message || "Failed to save reading.");
+    const message = error instanceof Error ? error.message : "Failed to save reading.";
+    throw new HttpsError("internal", message);
   }
 });
 
@@ -245,12 +251,13 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
 
     return { success: true, requestId: requestRef.id, message: "Personalized reading request submitted successfully." };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`[submitRoxyReadingRequestCallable] Error submitting request for user ${userId}:`, error);
     if (error instanceof z.ZodError) {
       throw new HttpsError("invalid-argument", `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`);
     }
-    throw new HttpsError("internal", error.message || "Failed to submit personalized reading request.");
+    const message = error instanceof Error ? error.message : "Failed to submit personalized reading request.";
+    throw new HttpsError("internal", message);
   }
 });
 
@@ -310,7 +317,7 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
       newStatus = 'completed';
       requestUpdates.completionDate = currentTime;
       const currentRequestSnap = await requestDocRef.get();
-      if (currentRequestSnap.exists) {
+      if (currentRequestSnap.exists()) {
         const currentRequestData = currentRequestSnap.data();
         if (currentRequestData?.transcriptionStatus === 'pending') {
           requestUpdates.transcriptionStatus = 'completed';
@@ -353,12 +360,13 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
     }
     return { success: true, message: `Interpretation ${validatedData.saveType === 'complete' ? 'completed' : 'draft saved'}.` };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`[saveTassologistInterpretationCallable] Error:`, error);
     if (error instanceof z.ZodError) {
       throw new HttpsError("invalid-argument", `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`);
     }
-    throw new HttpsError("internal", error.message || "Failed to save Tassologist interpretation.");
+    const message = error instanceof Error ? error.message : "Failed to save Tassologist interpretation.";
+    throw new HttpsError("internal", message);
   }
 });
 
@@ -381,7 +389,7 @@ export const markPersonalizedReadingAsReadCallable = onCall(async (request) => {
     const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
     const requestDocSnap = await requestDocRef.get();
 
-    if (!requestDocSnap.exists) {
+    if (!requestDocSnap.exists()) {
       throw new HttpsError("not-found", "Personalized reading request not found.");
     }
 
@@ -401,13 +409,14 @@ export const markPersonalizedReadingAsReadCallable = onCall(async (request) => {
     } else {
       throw new HttpsError("failed-precondition", `Reading request status is '${requestData.status}', cannot mark as read yet.`);
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`[markPersonalizedReadingAsReadCallable] Error for user ${userId}, request ${data.requestId}:`, error);
     if (error instanceof z.ZodError) {
       throw new HttpsError("invalid-argument", `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`);
     }
     if (error instanceof HttpsError) throw error;
-    throw new HttpsError("internal", error.message || "Failed to update reading status.");
+    const message = error instanceof Error ? error.message : "Failed to update reading status.";
+    throw new HttpsError("internal", message);
   }
 });
 
@@ -443,10 +452,13 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     console.log('[processAndTranscribeAudioCallable] Simplified logic returning dummy success.');
     return { success: true, operationName: "dummy-operation-" + Date.now(), message: "Audio processed (dummy) and transcription started (dummy)." };
 
-  } catch (error: any) {
-    console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR (Simplified Debugging Catch) for Tassologist ${tassologistId}, request ${data?.personalizedReadingRequestId || 'UNKNOWN_REQUEST_ID'}:`, error.message, error.stack, error.details);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error in simplified logic";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorDetails = (error as any)?.details; // Using 'as any' for unknown error structure
+    console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR (Simplified Debugging Catch) for Tassologist ${tassologistId}, request ${data?.personalizedReadingRequestId || 'UNKNOWN_REQUEST_ID'}:`, errorMessage, errorStack, errorDetails);
     console.error(`[processAndTranscribeAudioCallable] RAW ERROR OBJECT (Simplified Debugging Catch):`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
-    throw new HttpsError("internal", "Simplified function encountered an error: " + error.message);
+    throw new HttpsError("internal", "Simplified function encountered an error: " + errorMessage);
   }
 
   // ---- ORIGINAL LOGIC COMMENTED OUT FOR DEBUGGING ----
@@ -530,9 +542,12 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     console.log('[processAndTranscribeAudioCallable] Function completed successfully, returning to client.');
     return { success: true, operationName: operation.name, message: "Audio processed and transcription started." };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const tassologistIdForError = callableRequest?.auth?.uid || 'UNKNOWN_TASSOLOGIST';
+    const requestIdForError = (callableRequest?.data as ProcessAndTranscribeAudioCallableInput | undefined)?.personalizedReadingRequestId || 'UNKNOWN_REQUEST_ID';
+
     console.error(`[processAndTranscribeAudioCallable] RAW ERROR OBJECT:`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
-    console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR for Tassologist ${tassologistId}, request ${data?.personalizedReadingRequestId || 'UNKNOWN_REQUEST_ID'}:`, error.message, error.stack, error.details);
+    console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR for Tassologist ${tassologistIdForError}, request ${requestIdForError}:`, (error as Error).message, (error as Error).stack, (error as any).details);
 
     let errorMessage = "Failed to process audio and start transcription. Please check server logs for details.";
 
@@ -541,31 +556,35 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
       console.error("[processAndTranscribeAudioCallable] ZodError:", errorMessage);
       throw new HttpsError("invalid-argument", errorMessage);
     }
+    
+    const gcpError = error as any; // Using 'as any' to access potential gRPC/GCP specific error codes/messages
 
-    if (error.code === 'storage/object-not-found') {
+    if (gcpError.code === 'storage/object-not-found') {
       errorMessage = "GCS object not found after upload attempt, or bucket issue.";
-    } else if (error.message && (error.message.includes("SpeechClient") || error.message.includes("speech.googleapis.com"))) {
-      errorMessage = `Speech API error: ${error.message}`;
-    } else if (error.code && typeof error.code === 'number') {
-        errorMessage = `gRPC Error Code ${error.code}: ${error.message || error.details || 'Unknown gRPC error'}`;
-    } else if (error.message) {
-      errorMessage = error.message;
+    } else if (gcpError.message && (gcpError.message.includes("SpeechClient") || gcpError.message.includes("speech.googleapis.com"))) {
+      errorMessage = `Speech API error: ${gcpError.message}`;
+    } else if (gcpError.code && typeof gcpError.code === 'number') { // Check for gRPC-like error codes
+        errorMessage = `gRPC Error Code ${gcpError.code}: ${gcpError.message || gcpError.details || 'Unknown gRPC error'}`;
+    } else if (gcpError.message) {
+      errorMessage = gcpError.message;
     }
 
     console.error(`[processAndTranscribeAudioCallable] Determined error message for HttpsError: ${errorMessage}`);
 
-    if (data?.personalizedReadingRequestId) {
+    if (requestIdForError !== 'UNKNOWN_REQUEST_ID') {
         try {
-            console.log(`[processAndTranscribeAudioCallable] Attempting to update Firestore for request ${data.personalizedReadingRequestId} with failed status due to error: ${errorMessage.substring(0, 500)}`);
-            const requestDocRef = adminDb.collection('personalizedReadings').doc(data.personalizedReadingRequestId);
+            console.log(`[processAndTranscribeAudioCallable] Attempting to update Firestore for request ${requestIdForError} with failed status due to error: ${errorMessage.substring(0, 500)}`);
+            const requestDocRef = adminDb.collection('personalizedReadings').doc(requestIdForError);
             await requestDocRef.update({
                 transcriptionStatus: 'failed',
                 transcriptionError: errorMessage.substring(0, 500),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
-            console.log(`[processAndTranscribeAudioCallable] Firestore updated with failed status for request ${data.personalizedReadingRequestId}.`);
-        } catch (firestoreError: any) {
-            console.error(`[processAndTranscribeAudioCallable] ADDITIONALLY FAILED to update Firestore with error status for request ${data.personalizedReadingRequestId}:`, firestoreError.message, firestoreError.stack);
+            console.log(`[processAndTranscribeAudioCallable] Firestore updated with failed status for request ${requestIdForError}.`);
+        } catch (firestoreError: unknown) {
+            const fsErrorMessage = firestoreError instanceof Error ? firestoreError.message : String(firestoreError);
+            const fsErrorStack = firestoreError instanceof Error ? firestoreError.stack : undefined;
+            console.error(`[processAndTranscribeAudioCallable] ADDITIONALLY FAILED to update Firestore with error status for request ${requestIdForError}:`, fsErrorMessage, fsErrorStack);
         }
     } else {
         console.warn(`[processAndTranscribeAudioCallable] personalizedReadingRequestId not available in error handler. Cannot update Firestore status.`);
@@ -576,3 +595,4 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
   }
   */
 });
+
