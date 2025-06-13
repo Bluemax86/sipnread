@@ -263,6 +263,7 @@ function ReadingDetailContent() {
                             objectFit="cover"
                             className="transition-transform duration-300 pointer-events-none"
                             data-ai-hint="tea cup leaves"
+                            unoptimized
                           />
                         </div>
                       </DialogTrigger>
@@ -279,6 +280,7 @@ function ReadingDetailContent() {
                              style={{ width: 'auto', height: 'auto', maxHeight: '85vh', maxWidth: '100%' }}
                              objectFit="contain"
                              data-ai-hint="tea cup leaves"
+                             unoptimized
                            />
                          </div>
                        </DialogContent>
@@ -361,3 +363,5 @@ export default function ReadingDetailPage() {
     </Suspense>
   );
 }
+
+    

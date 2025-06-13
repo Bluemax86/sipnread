@@ -297,6 +297,7 @@ export default function MyReadingsPage() {
                       objectFit="cover"
                       className="group-hover:scale-105 transition-transform duration-300"
                       data-ai-hint="tea cup leaves"
+                      unoptimized
                     />
                   </div>
                   <CardHeader className="pb-3">
@@ -338,3 +339,5 @@ export default function MyReadingsPage() {
     </div>
   );
 }
+
+    
