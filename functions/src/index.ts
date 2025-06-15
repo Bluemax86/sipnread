@@ -269,11 +269,11 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
 
 const ManualSymbolCallableSchema = z.object({
   symbol: z.string(),
-  position: z.preprocess( // Ensure empty strings or null are treated as undefined for optional validation
+  position: z.preprocess( 
     (val) => (val === "" || val === null ? undefined : val),
     z.number().int().min(0, "Position must be a non-negative integer.").max(12, "Position must be between 0 and 12.")
     .optional()
-  ).nullable(), // Allow null to pass through from client if undefined was sent
+  ).nullable(), 
 });
 
 
@@ -295,14 +295,17 @@ export type SaveTassologistInterpretationCallableInput = z.infer<typeof SaveTass
 type PersonalizedReadingStatus = 'new' | 'in-progress' | 'completed' | 'cancelled' | 'read';
 type TranscriptionStatus = 'not_requested' | 'pending' | 'completed' | 'failed' | null;
 
-interface RequestUpdatePayloadBase {
+// This interface defines the specific fields allowed in the request update payload.
+// It also includes an index signature to satisfy Firestore's UpdateData type,
+// allowing for FieldValue types and other potential future fields without breaking strict typing.
+interface RequestUpdatePayload {
   updatedAt: admin.firestore.FieldValue;
   transcriptionError: string | null;
   completionDate?: admin.firestore.FieldValue;
   status?: PersonalizedReadingStatus;
   transcriptionStatus?: TranscriptionStatus;
+  [key: string]: admin.firestore.FieldValue | string | null | PersonalizedReadingStatus | TranscriptionStatus | boolean | number | Date | undefined;
 }
-type RequestUpdatePayload = RequestUpdatePayloadBase;
 
 
 export const saveTassologistInterpretationCallable = onCall(async (request) => {
@@ -631,6 +634,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     throw new HttpsError("internal", errorMessage);
   }
 });
+
 
 
 
