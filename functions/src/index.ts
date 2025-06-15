@@ -302,7 +302,7 @@ interface RequestUpdatePayloadBase {
   status?: PersonalizedReadingStatus;
   transcriptionStatus?: TranscriptionStatus;
 }
-type RequestUpdatePayload = RequestUpdatePayloadBase & { [key: string]: any };
+type RequestUpdatePayload = RequestUpdatePayloadBase;
 
 
 export const saveTassologistInterpretationCallable = onCall(async (request) => {
@@ -631,6 +631,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     throw new HttpsError("internal", errorMessage);
   }
 });
+
 
 
 
