@@ -39,7 +39,7 @@ interface TassologistInterpretationFormProps {
   onSubmit: (data: TassologistInterpretationFormValues, saveType: SaveTassologistInterpretationType) => Promise<void>;
   isSubmittingForm: boolean; 
   initialData?: Partial<TassologistInterpretationFormValues>;
-  onTranscriptFetched?: (transcript: string, operationName?: string) => void; 
+  onNewOperationId?: (operationName: string) => void; 
   currentTranscriptionStatus?: TranscriptionStatus;
 }
 
@@ -48,14 +48,14 @@ export function TassologistInterpretationForm({
   onSubmit, 
   isSubmittingForm, 
   initialData,
-  onTranscriptFetched,
+  onNewOperationId,
   currentTranscriptionStatus
 }: TassologistInterpretationFormProps) {
   const form = useForm<TassologistInterpretationFormValues>({
     resolver: zodResolver(tassologistInterpretationSchema),
     defaultValues: {
-      manualSymbols: initialData?.manualSymbols || [{ symbol: '', position: undefined }],
-      manualInterpretation: initialData?.manualInterpretation || '',
+      manualSymbols: [{ symbol: '', position: undefined }],
+      manualInterpretation: '',
     },
   });
 
@@ -73,13 +73,27 @@ export function TassologistInterpretationForm({
   const { toast } = useToast();
 
   useEffect(() => {
-    if (initialData?.manualInterpretation !== undefined) {
+    // Populate the entire form only on initial mount if initialData is present
+    if (initialData) {
+      form.reset({
+        manualSymbols: initialData.manualSymbols && initialData.manualSymbols.length > 0 
+                       ? initialData.manualSymbols 
+                       : [{ symbol: '', position: undefined }],
+        manualInterpretation: initialData.manualInterpretation || '',
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array ensures this runs only on mount
+
+  useEffect(() => {
+    // This effect specifically watches for changes to initialData.manualInterpretation
+    // (e.g., when a transcript is fetched by the parent) and updates only that field.
+    if (initialData?.manualInterpretation !== undefined && 
+        initialData.manualInterpretation !== form.getValues('manualInterpretation')) {
       form.setValue('manualInterpretation', initialData.manualInterpretation);
     }
-    if (initialData?.manualSymbols !== undefined) {
-        form.setValue('manualSymbols', initialData.manualSymbols.length > 0 ? initialData.manualSymbols : [{ symbol: '', position: undefined }]);
-    }
-  }, [initialData, form]);
+  }, [initialData?.manualInterpretation, form]);
+
 
   const handleStartStopDictation = async () => {
     if (isRecording) {
@@ -133,7 +147,7 @@ export function TassologistInterpretationForm({
             const functions = getFunctions(firebaseApp);
             const processAndTranscribeAudio = httpsCallable<
               ProcessAndTranscribeAudioCallableInput,
-              { success: boolean; operationName?: string; message?: string } // Expected success response
+              { success: boolean; operationName?: string; message?: string } 
             >(functions, 'processAndTranscribeAudioCallable');
 
             const payload: ProcessAndTranscribeAudioCallableInput = {
@@ -142,36 +156,23 @@ export function TassologistInterpretationForm({
               mimeType: options.mimeType,
             };
             
-            console.log("[TassologistInterpretationForm] Calling processAndTranscribeAudioCallable with payload:", payload.mimeType, `requestId: ${payload.personalizedReadingRequestId}`);
             const result = await processAndTranscribeAudio(payload);
-            console.log("[TassologistInterpretationForm] Raw result from callable:", JSON.stringify(result, null, 2));
-
 
             if (result && result.data && result.data.success && result.data.operationName) {
-              toast({ title: "Transcription Started", description: `Processing in background. You can save draft or refresh for transcript later.` });
-              if (onTranscriptFetched) {
-                onTranscriptFetched("", result.data.operationName); 
+              toast({ title: "Transcription Started", description: `Processing in background.` });
+              if (onNewOperationId) {
+                onNewOperationId(result.data.operationName); 
               }
             } else {
-              // This branch handles cases where the callable returned successfully (HTTP 200)
-              // but the logical operation indicated failure (e.g., result.data.success was false)
-              // or the response structure was not as expected.
-              const errorMessage = result?.data?.message || "Could not start transcription (unexpected response structure).";
-              console.error("[TassologistInterpretationForm] Callable returned non-success or malformed data:", result?.data);
+              const errorMessage = result?.data?.message || "Could not start transcription.";
               toast({ variant: "destructive", title: "Transcription Start Failed", description: errorMessage });
             }
           } catch (error: unknown) {
-            // This catch block handles HttpsError thrown by the callable, network errors, etc.
-            const callableError = error as FunctionsError; // Cast to FunctionsError for more specific details
-            console.error("[TassologistInterpretationForm] Error calling processAndTranscribeAudioCallable:", JSON.stringify(callableError, null, 2));
-            
+            const callableError = error as FunctionsError; 
             let description = "An error occurred during audio processing.";
             if (callableError.message) {
               description = callableError.message;
             }
-            // You can check callableError.code and callableError.details for more specific error handling
-            // e.g., if (callableError.code === 'unauthenticated') { ... }
-
             toast({ variant: "destructive", title: "Callable Error", description });
           } finally {
             setIsProcessingAudio(false);
@@ -209,12 +210,16 @@ export function TassologistInterpretationForm({
   };
 
   const overallProcessing = isSubmittingForm || isRecording || isProcessingAudio;
+  
   const dictationButtonDisabled = isSubmittingForm || isProcessingAudio || currentTranscriptionStatus === 'pending';
   const dictationButtonText = 
     isRecording ? "Stop Dictation" :
     isProcessingAudio ? "Processing Audio..." :
     currentTranscriptionStatus === 'pending' ? "Transcription Pending..." :
     "Start Dictation";
+
+  const interpretationValue = form.watch('manualInterpretation');
+  const canComplete = interpretationValue && interpretationValue.trim().length >= 10;
 
 
   return (
@@ -252,14 +257,28 @@ export function TassologistInterpretationForm({
                       <FormItem className="w-28">
                          <FormLabel htmlFor={`position-${index}`} className="sr-only">Position</FormLabel>
                         <FormControl>
-                          <Input 
-                            id={`position-${index}`} 
-                            type="number" 
-                            placeholder="Pos (0-12)" 
-                            {...field} 
-                            value={field.value === undefined ? '' : field.value}
-                            onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))} 
-                            disabled={overallProcessing} 
+                          <Input
+                            id={`position-${index}`}
+                            type="number"
+                            min="0" 
+                            placeholder="Pos (0-12)"
+                            {...field}
+                            value={field.value === undefined ? '' : String(field.value)}
+                            onChange={e => {
+                              const rawValue = e.target.value;
+                              if (rawValue === '') {
+                                field.onChange(undefined);
+                              } else {
+                                const num = Number(rawValue);
+                                if (!isNaN(num) && num < 0) {
+                                  field.onChange(0); // Correct negative input to 0
+                                } else {
+                                  // Pass Number-converted value; Zod will validate if it's a valid number, int, and within range.
+                                  field.onChange(Number(rawValue));
+                                }
+                              }
+                            }}
+                            disabled={overallProcessing}
                           />
                         </FormControl>
                         <FormMessage />
@@ -332,9 +351,9 @@ export function TassologistInterpretationForm({
                 onClick={() => handleFormSubmitInternal('draft')} 
                 disabled={overallProcessing} 
                 variant="outline" 
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto text-green-700 border-green-700 hover:bg-green-600 hover:text-green-50 focus-visible:ring-green-500 disabled:text-muted-foreground disabled:border-input disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
               >
-                {isSubmittingForm && form.formState.submitCount > 0 && form.formState.isSubmitting && (form.getValues().manualInterpretation === initialData?.manualInterpretation) ? ( 
+                {isSubmittingForm && form.formState.submitCount > 0 && form.formState.isSubmitting && (form.getValues('manualInterpretation').trim().length < 10 || !canComplete) ? ( 
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Saving Draft...
@@ -349,10 +368,10 @@ export function TassologistInterpretationForm({
               <Button 
                 type="button" 
                 onClick={() => handleFormSubmitInternal('complete')} 
-                disabled={overallProcessing} 
+                disabled={overallProcessing || !canComplete} 
                 className="w-full sm:w-auto"
               >
-                 {isSubmittingForm && form.formState.submitCount > 0 && form.formState.isSubmitting && (form.getValues().manualInterpretation !== initialData?.manualInterpretation) ? ( 
+                 {isSubmittingForm && form.formState.submitCount > 0 && form.formState.isSubmitting && canComplete ? ( 
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Completing...
@@ -371,4 +390,3 @@ export function TassologistInterpretationForm({
     </Card>
   );
 }
-

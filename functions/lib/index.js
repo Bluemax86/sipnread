@@ -266,7 +266,9 @@ exports.submitRoxyReadingRequestCallable = (0, https_1.onCall)(async (request) =
 // ---- Save Tassologist Interpretation Callable ----
 const ManualSymbolCallableSchema = zod_1.z.object({
     symbol: zod_1.z.string(),
-    position: zod_1.z.number().int().min(0, "Position must be between 0 and 12.").max(12, "Position must be between 0 and 12.").optional().nullable(),
+    position: zod_1.z.preprocess(// Ensure empty strings or null are treated as undefined for optional validation
+    (val) => (val === "" || val === null ? undefined : val), zod_1.z.number().int().min(0, "Position must be a non-negative integer.").max(12, "Position must be between 0 and 12.")
+        .optional()).nullable(), // Allow null to pass through from client if undefined was sent
 });
 const StoredManualSymbolSchema = zod_1.z.object({
     symbolName: zod_1.z.string(),
@@ -276,7 +278,7 @@ const SaveTassologistInterpretationCallableInputSchema = zod_1.z.object({
     requestId: zod_1.z.string().min(1),
     originalReadingId: zod_1.z.string().min(1),
     manualSymbols: zod_1.z.array(ManualSymbolCallableSchema),
-    manualInterpretation: zod_1.z.string().optional().nullable(), // Allow empty/null for draft
+    manualInterpretation: zod_1.z.string().optional().nullable(),
     saveType: zod_1.z.enum(['complete', 'draft']),
 });
 exports.saveTassologistInterpretationCallable = (0, https_1.onCall)(async (request) => {
@@ -286,7 +288,6 @@ exports.saveTassologistInterpretationCallable = (0, https_1.onCall)(async (reque
     const data = request.data;
     try {
         const validatedData = SaveTassologistInterpretationCallableInputSchema.parse(data);
-        // Additional validation for 'complete' save type
         if (validatedData.saveType === 'complete') {
             if (!validatedData.manualInterpretation || validatedData.manualInterpretation.trim().length < 10) {
                 throw new https_1.HttpsError("invalid-argument", "Interpretation must be at least 10 characters long when completing a reading.");
@@ -301,7 +302,7 @@ exports.saveTassologistInterpretationCallable = (0, https_1.onCall)(async (reque
         }));
         batch.update(readingDocRef, {
             manualSymbolsDetected: symbolsToStore,
-            manualInterpretation: validatedData.manualInterpretation || "", // Store empty string if null/undefined
+            manualInterpretation: validatedData.manualInterpretation || "",
             updatedAt: currentTime,
         });
         const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
@@ -360,7 +361,6 @@ exports.saveTassologistInterpretationCallable = (0, https_1.onCall)(async (reque
         if (error instanceof zod_1.z.ZodError) {
             throw new https_1.HttpsError("invalid-argument", `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`);
         }
-        // If it's already an HttpsError (like the one we throw for interpretation length), rethrow it
         if (error instanceof https_1.HttpsError) {
             throw error;
         }
@@ -382,7 +382,7 @@ exports.markPersonalizedReadingAsReadCallable = (0, https_1.onCall)(async (reque
         const validatedData = MarkPersonalizedReadingAsReadCallableInputSchema.parse(data);
         const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
         const requestDocSnap = await requestDocRef.get();
-        if (!requestDocSnap.exists()) {
+        if (!requestDocSnap.exists) {
             throw new https_1.HttpsError("not-found", "Personalized reading request not found.");
         }
         const requestData = requestDocSnap.data();
@@ -449,11 +449,17 @@ exports.processAndTranscribeAudioCallable = (0, https_1.onCall)(processAudioCall
             }
             catch (adminSDKError) {
                 console.error("[processAndTranscribeAudioCallable] Error getting default bucket from Admin SDK:", adminSDKError);
-                // Fallback to project ID based naming if Admin SDK fails
                 const GCP_PROJECT_ENV = process.env.GCP_PROJECT;
                 const GOOGLE_CLOUD_PROJECT_ENV = process.env.GOOGLE_CLOUD_PROJECT;
-                bucketName = `${GCP_PROJECT_ENV || GOOGLE_CLOUD_PROJECT_ENV}.appspot.com`;
-                console.log(`[processAndTranscribeAudioCallable] Falling back to constructed bucket name: ${bucketName}`);
+                const projectId = GCP_PROJECT_ENV || GOOGLE_CLOUD_PROJECT_ENV;
+                if (projectId) {
+                    bucketName = `${projectId}.appspot.com`;
+                    console.log(`[processAndTranscribeAudioCallable] Falling back to constructed bucket name: ${bucketName}`);
+                }
+                else {
+                    console.error("[processAndTranscribeAudioCallable] CRITICAL: Project ID not found in environment variables. Cannot construct bucket name.");
+                    throw new https_1.HttpsError("internal", "Storage bucket configuration error. Project ID missing.");
+                }
             }
         }
         else {
@@ -479,7 +485,7 @@ exports.processAndTranscribeAudioCallable = (0, https_1.onCall)(processAudioCall
         const configRec = {
             languageCode: 'en-US',
             enableAutomaticPunctuation: true,
-            model: 'latest_long', // Corrected model
+            model: 'latest_long',
             audioChannelCount: 1,
             enableWordTimeOffsets: false,
         };
@@ -522,7 +528,6 @@ exports.processAndTranscribeAudioCallable = (0, https_1.onCall)(processAudioCall
             console.error("[processAndTranscribeAudioCallable] ZodError:", errorMessage);
             throw new https_1.HttpsError("invalid-argument", errorMessage);
         }
-        // Using type assertion for gcpError
         const gcpError = error;
         if (gcpError.code === 'storage/object-not-found') {
             errorMessage = "GCS object not found after upload attempt, or bucket issue.";
@@ -559,7 +564,7 @@ exports.processAndTranscribeAudioCallable = (0, https_1.onCall)(processAudioCall
         }
         console.log(`[processAndTranscribeAudioCallable] Throwing HttpsError to client with message: ${errorMessage}`);
         if (error instanceof https_1.HttpsError)
-            throw error; // Re-throw if it's already an HttpsError
+            throw error;
         throw new https_1.HttpsError("internal", errorMessage);
     }
 });
