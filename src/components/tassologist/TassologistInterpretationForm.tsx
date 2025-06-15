@@ -66,8 +66,8 @@ export function TassologistInterpretationForm({
   onSubmit, 
   isSubmittingForm, 
   initialData,
-  onNewOperationId, // This prop is for the server-side flow, kept for code integrity
-  currentTranscriptionStatus // This prop is for the server-side flow, kept for code integrity
+  onNewOperationId, 
+  currentTranscriptionStatus 
 }: TassologistInterpretationFormProps) {
   const form = useForm<TassologistInterpretationFormValues>({
     resolver: zodResolver(tassologistInterpretationSchema),
@@ -83,15 +83,10 @@ export function TassologistInterpretationForm({
     name: "manualSymbols",
   });
 
-  // 'isRecording' state now refers to client-side speech recognition
   const [isRecording, setIsRecording] = useState(false);
-  // 'isProcessingAudio' is for the server-side flow, kept for code integrity
   const [isProcessingAudio, setIsProcessingAudio] = useState(false);
   
-  // Ref for client-side SpeechRecognition instance
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-
-  // Refs for server-side MediaRecorder flow, kept for code integrity
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const { toast } = useToast();
@@ -119,20 +114,17 @@ export function TassologistInterpretationForm({
   const handleStartStopDictation = async () => {
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    // --- New Client-Side Speech Recognition Logic ---
     if (SpeechRecognitionAPI) {
-      if (isRecording) { // User clicked "Stop Dictation"
+      if (isRecording) { 
         if (recognitionRef.current) {
           recognitionRef.current.stop();
         }
-        // setIsRecording(false); // onend will handle this
         return;
       }
 
-      // User clicked "Start Dictation"
       recognitionRef.current = new SpeechRecognitionAPI();
-      recognitionRef.current.continuous = true; // Keep listening
-      recognitionRef.current.interimResults = true; // Show interim results (though we only append final ones)
+      recognitionRef.current.continuous = true; 
+      recognitionRef.current.interimResults = true; 
       recognitionRef.current.lang = 'en-US';
 
       let currentFinalTranscript = form.getValues('manualInterpretation') || '';
@@ -178,7 +170,6 @@ export function TassologistInterpretationForm({
       };
 
       try {
-        // Check for microphone permission (optional, browser usually prompts)
         await navigator.mediaDevices.getUserMedia({ audio: true });
         if (recognitionRef.current) {
           recognitionRef.current.start();
@@ -186,25 +177,21 @@ export function TassologistInterpretationForm({
       } catch (err) {
         console.error("Error getting microphone permission:", err);
         toast({ variant: "destructive", title: "Microphone Error", description: "Could not access microphone. Please check permissions." });
-        setIsRecording(false); // Reset recording state if permission fails
+        setIsRecording(false); 
       }
-      return; // Exit after handling client-side path
+      return; 
     } else {
       toast({ variant: "destructive", title: "Browser Not Supported", description: "Speech recognition is not supported by your browser." });
-      return; // Exit if API not supported
+      return; 
     }
 
-    // --- Start of existing server-side dictation code (PRESERVED BUT NOT EXECUTED by this button's new primary path) ---
-    // This code block will not be reached if SpeechRecognitionAPI is available because of the 'return' statements above.
-    // It is kept in the file as per user request "Leave all the code for the current dictation in place".
-    // The 'isRecording' here refers to the original server-side context, shadowing the one for client-side.
-    if (true) { // This 'if(true)' is just to make the block parsable and visually distinct.
-      const originalIsRecording = false; // Placeholder to avoid name collision if JS were to run this
+    // Existing server-side dictation code (preserved but not executed by this button's new primary path)
+    if (true) { 
+      const originalIsRecording = false; 
       if (originalIsRecording) { 
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
           mediaRecorderRef.current.stop();
         }
-        // setIsRecording(false); // This would be for the original server-side state
         return;
       }
 
@@ -289,20 +276,16 @@ export function TassologistInterpretationForm({
         };
 
         mediaRecorderRef.current.start();
-        // setIsRecording(true); // This would be for the original server-side state
         toast({ title: "Recording Started (Server)", description: "Speak now. Click again to stop and process."});
       } catch (err) {
         console.error("Error accessing microphone (Server):", err);
         toast({ variant: "destructive", title: "Microphone Error (Server)", description: "Could not access microphone. Please check permissions." });
-        // setIsRecording(false); // This would be for the original server-side state
       }
     }
-    // --- End of existing server-side dictation code ---
   };
   
   useEffect(() => {
     return () => { 
-      // Clean up client-side recognition if active
       if (recognitionRef.current) {
         recognitionRef.current.stop();
         recognitionRef.current.onresult = null;
@@ -311,7 +294,6 @@ export function TassologistInterpretationForm({
         recognitionRef.current.onerror = null;
         recognitionRef.current = null;
       }
-      // Clean up server-side MediaRecorder if it was somehow active (though it shouldn't be by this button)
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
@@ -325,12 +307,10 @@ export function TassologistInterpretationForm({
     return form.handleSubmit((data) => onSubmit(data, saveType))();
   };
 
-  // Button is disabled if form is submitting OR client-side recording is active
-  const overallProcessing = isSubmittingForm || isRecording; 
+  const overallProcessing = isSubmittingForm; 
   
-  // Dictation button text and disabled state for NEW client-side dictation
   const dictationButtonText = isRecording ? "Stop Dictation" : "Start Client Dictation";
-  const dictationButtonDisabled = isSubmittingForm || isRecording;
+  const dictationButtonDisabled = isSubmittingForm;
 
 
   const interpretationValue = form.watch('manualInterpretation');
@@ -439,7 +419,7 @@ export function TassologistInterpretationForm({
                         onClick={handleStartStopDictation} 
                         variant={isRecording ? "destructive" : "outline"} 
                         size="sm" 
-                        disabled={dictationButtonDisabled} // Uses new client-side logic
+                        disabled={dictationButtonDisabled} 
                         className="flex items-center"
                       >
                         {isRecording ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mic className="mr-2 h-4 w-4" />}
@@ -505,4 +485,3 @@ export function TassologistInterpretationForm({
     </Card>
   );
 }
-
