@@ -9,14 +9,15 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Trash2, Loader2, Send, Mic, BookOpenText, Sparkles, Save } from 'lucide-react';
+import { PlusCircle, Trash2, Loader2, Send, Mic, BookOpenText, Sparkles, Save, ScanSearch } from 'lucide-react';
 import type { SaveTassologistInterpretationType, TranscriptionStatus } from '@/app/actions';
 import { useEffect, useState, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { app as firebaseApp } from '@/lib/firebase'; 
+import { app as firebaseApp } from '@/lib/firebase';
 import { getFunctions, httpsCallable, type FunctionsError } from 'firebase/functions';
 import type { ProcessAndTranscribeAudioCallableInput } from '../../../functions/src';
+import { extractSymbolsFromText, type ExtractSymbolsInput, type ExtractedSymbol } from '@/ai/flows/extract-symbols-from-text';
 
 
 const symbolSchema = z.object({
@@ -35,16 +36,14 @@ const tassologistInterpretationSchema = z.object({
 export type TassologistInterpretationFormValues = z.infer<typeof tassologistInterpretationSchema>;
 
 interface TassologistInterpretationFormProps {
-  personalizedReadingRequestId: string; 
+  personalizedReadingRequestId: string;
   onSubmit: (data: TassologistInterpretationFormValues, saveType: SaveTassologistInterpretationType) => Promise<void>;
-  isSubmittingForm: boolean; 
+  isSubmittingForm: boolean;
   initialData?: Partial<TassologistInterpretationFormValues>;
-  onNewOperationId?: (operationName: string) => void; 
+  onNewOperationId?: (operationName: string) => void;
   currentTranscriptionStatus?: TranscriptionStatus;
 }
 
-// TypeScript interfaces for browser SpeechRecognition API if not globally available
-// These might be available in modern lib.dom.d.ts, but included for explicitness
 declare global {
   interface Window {
     SpeechRecognition: typeof SpeechRecognition;
@@ -56,18 +55,18 @@ interface SpeechRecognitionEvent extends Event {
   readonly results: SpeechRecognitionResultList;
 }
 interface SpeechRecognitionErrorEvent extends Event {
-  readonly error: string; 
+  readonly error: string;
   readonly message: string;
 }
 
 
-export function TassologistInterpretationForm({ 
-  personalizedReadingRequestId, 
-  onSubmit, 
-  isSubmittingForm, 
+export function TassologistInterpretationForm({
+  personalizedReadingRequestId,
+  onSubmit,
+  isSubmittingForm,
   initialData,
-  onNewOperationId, 
-  currentTranscriptionStatus 
+  onNewOperationId,
+  currentTranscriptionStatus
 }: TassologistInterpretationFormProps) {
   const form = useForm<TassologistInterpretationFormValues>({
     resolver: zodResolver(tassologistInterpretationSchema),
@@ -78,14 +77,15 @@ export function TassologistInterpretationForm({
   });
 
   const { user } = useAuth();
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
     name: "manualSymbols",
   });
 
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessingAudio, setIsProcessingAudio] = useState(false);
-  
+  const [isExtractingSymbols, setIsExtractingSymbols] = useState(false);
+
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -94,17 +94,17 @@ export function TassologistInterpretationForm({
   useEffect(() => {
     if (initialData) {
       form.reset({
-        manualSymbols: initialData.manualSymbols && initialData.manualSymbols.length > 0 
-                       ? initialData.manualSymbols 
+        manualSymbols: initialData.manualSymbols && initialData.manualSymbols.length > 0
+                       ? initialData.manualSymbols
                        : [{ symbol: '', position: undefined }],
         manualInterpretation: initialData.manualInterpretation || '',
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+  }, []);
 
   useEffect(() => {
-    if (initialData?.manualInterpretation !== undefined && 
+    if (initialData?.manualInterpretation !== undefined &&
         initialData.manualInterpretation !== form.getValues('manualInterpretation')) {
       form.setValue('manualInterpretation', initialData.manualInterpretation);
     }
@@ -115,17 +115,16 @@ export function TassologistInterpretationForm({
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (SpeechRecognitionAPI) {
-      if (isRecording) { 
+      if (isRecording) {
         if (recognitionRef.current) {
           recognitionRef.current.stop();
         }
-        return; // Exit if already recording and stop() was called
+        return;
       }
 
-      // Not recording, so start new recognition
       recognitionRef.current = new SpeechRecognitionAPI();
-      recognitionRef.current.continuous = true; 
-      recognitionRef.current.interimResults = true; 
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'en-US';
 
       let currentFinalTranscript = form.getValues('manualInterpretation') || '';
@@ -150,56 +149,52 @@ export function TassologistInterpretationForm({
 
       recognitionRef.current.onend = () => {
         setIsRecording(false);
-        if (recognitionRef.current) { // Clean up event handlers
+        if (recognitionRef.current) {
             recognitionRef.current.onresult = null;
             recognitionRef.current.onstart = null;
             recognitionRef.current.onend = null;
             recognitionRef.current.onerror = null;
         }
-        recognitionRef.current = null; // Release the instance
+        recognitionRef.current = null;
         toast({ title: "Dictation Stopped" });
       };
 
       recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error("Speech recognition error:", event.error, event.message);
         toast({ variant: "destructive", title: "Dictation Error", description: event.error || event.message || "Unknown dictation error" });
-        setIsRecording(false); // Ensure recording state is updated on error
+        setIsRecording(false);
         if (recognitionRef.current) {
-          recognitionRef.current.stop(); // Attempt to stop if not already stopped
+          recognitionRef.current.stop();
         }
         recognitionRef.current = null;
       };
 
       try {
-        // Ensure microphone permission (modern browsers might re-prompt or use existing permission)
         await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (recognitionRef.current) { // Check again in case of race conditions or quick UI interaction
+        if (recognitionRef.current) {
           recognitionRef.current.start();
         }
       } catch (err) {
         console.error("Error getting microphone permission:", err);
         toast({ variant: "destructive", title: "Microphone Error", description: "Could not access microphone. Please check permissions." });
-        setIsRecording(false); // Reset state if permission fails
+        setIsRecording(false);
       }
-      return; // Important: return here to prevent falling through to server-side logic
+      return;
     } else {
       toast({ variant: "destructive", title: "Browser Not Supported", description: "Speech recognition is not supported by your browser." });
-      return; // Explicitly return if API not supported
+      return;
     }
 
-    // ----- Server-side dictation code (Preserved but not primary path now) -----
-    // This block is now effectively "dead code" if SpeechRecognitionAPI is supported.
-    // It's kept here as per your request not to remove it.
-    if (true) { // This condition can be removed or set to false if you never want it to run
-      const originalIsRecording = false; // Simulating old state if we were to use this path
-      if (originalIsRecording) { // This 'if' block for stopping server recording is effectively unreachable
+    // Server-side dictation code (Preserved)
+    if (false) { // This block is effectively dead code now.
+      const originalIsRecording = false;
+      if (originalIsRecording) {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
           mediaRecorderRef.current.stop();
         }
         return;
       }
 
-      // Logic to start server-side recording (MediaRecorder)
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const options = { mimeType: 'audio/webm;codecs=opus' };
@@ -221,9 +216,9 @@ export function TassologistInterpretationForm({
             setIsProcessingAudio(false);
             return;
           }
-          
+
           const audioBlob = new Blob(audioChunksRef.current, { type: options.mimeType });
-          
+
           if (!user) {
             toast({ variant: "destructive", title: "Authentication Error (Server)", description: "You must be logged in for server processing." });
             setIsProcessingAudio(false);
@@ -243,7 +238,7 @@ export function TassologistInterpretationForm({
               const functions = getFunctions(firebaseApp);
               const processAndTranscribeAudio = httpsCallable<
                 ProcessAndTranscribeAudioCallableInput,
-                { success: boolean; operationName?: string; message?: string } 
+                { success: boolean; operationName?: string; message?: string }
               >(functions, 'processAndTranscribeAudioCallable');
 
               const payload: ProcessAndTranscribeAudioCallableInput = {
@@ -251,20 +246,20 @@ export function TassologistInterpretationForm({
                 personalizedReadingRequestId,
                 mimeType: options.mimeType,
               };
-              
+
               const result = await processAndTranscribeAudio(payload);
 
               if (result && result.data && result.data.success && result.data.operationName) {
                 toast({ title: "Transcription Started (Server)", description: `Processing in background.` });
                 if (onNewOperationId) {
-                  onNewOperationId(result.data.operationName); 
+                  onNewOperationId(result.data.operationName);
                 }
               } else {
                 const errorMessage = result?.data?.message || "Could not start server transcription.";
                 toast({ variant: "destructive", title: "Server Transcription Start Failed", description: errorMessage });
               }
             } catch (error: unknown) {
-              const callableError = error as FunctionsError; 
+              const callableError = error as FunctionsError;
               let description = "An error occurred during server audio processing.";
               if (callableError.message) {
                 description = callableError.message;
@@ -288,9 +283,9 @@ export function TassologistInterpretationForm({
       }
     }
   };
-  
+
   useEffect(() => {
-    return () => { 
+    return () => {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
         recognitionRef.current.onresult = null;
@@ -312,11 +307,55 @@ export function TassologistInterpretationForm({
     return form.handleSubmit((data) => onSubmit(data, saveType))();
   };
 
-  const overallProcessing = isSubmittingForm; 
-  
+  const handleExtractSymbols = async () => {
+    const interpretationText = form.getValues('manualInterpretation');
+    if (!interpretationText || interpretationText.trim().length < 10) {
+      toast({
+        variant: 'destructive',
+        title: 'Not Enough Text',
+        description: 'Please enter or dictate more interpretation text before extracting symbols.',
+      });
+      return;
+    }
+
+    setIsExtractingSymbols(true);
+    toast({ title: 'Extracting Symbols...', description: 'AI is analyzing your text.' });
+
+    try {
+      const input: ExtractSymbolsInput = { interpretationText };
+      const result = await extractSymbolsFromText(input);
+
+      if (result && result.extractedSymbols) {
+        const newSymbolsForForm = result.extractedSymbols.map((s: ExtractedSymbol) => ({
+          symbol: s.symbolName,
+          position: s.position,
+        }));
+
+        if (newSymbolsForForm.length > 0) {
+          replace(newSymbolsForForm); // Replace existing symbols with new ones
+        } else {
+          replace([{ symbol: '', position: undefined}]); // If no symbols found, clear to one empty field
+          toast({ title: 'No Symbols Found', description: 'The AI could not identify specific symbols in your text.' });
+        }
+        toast({ title: 'Symbols Extracted!', description: `${newSymbolsForForm.length} symbols updated.` });
+      } else {
+        throw new Error("AI did not return a valid symbol list.");
+      }
+    } catch (error: unknown) {
+      console.error('Error extracting symbols:', error);
+      const message = error instanceof Error ? error.message : 'Failed to extract symbols.';
+      toast({ variant: 'destructive', title: 'Symbol Extraction Failed', description: message });
+    } finally {
+      setIsExtractingSymbols(false);
+    }
+  };
+
+
+  const overallProcessing = isSubmittingForm || isProcessingAudio || isExtractingSymbols;
+
   const dictationButtonText = isRecording ? "Stop Dictation" : "Start Dictation";
-  // Button is disabled only when the main form is submitting.
-  const dictationButtonDisabled = isSubmittingForm;
+  const dictationButtonDisabled = isSubmittingForm || isProcessingAudio || isExtractingSymbols;
+  const getSymbolsButtonDisabled = isSubmittingForm || isProcessingAudio || isRecording || isExtractingSymbols;
 
 
   const interpretationValue = form.watch('manualInterpretation');
@@ -361,7 +400,7 @@ export function TassologistInterpretationForm({
                           <Input
                             id={`position-${index}`}
                             type="number"
-                            min="0" 
+                            min="0"
                             max="12"
                             placeholder="Pos (0-12)"
                             {...field}
@@ -373,7 +412,7 @@ export function TassologistInterpretationForm({
                               } else {
                                 const num = Number(rawValue);
                                 if (!isNaN(num) && num < 0) {
-                                  field.onChange(0); 
+                                  field.onChange(0);
                                 } else {
                                   field.onChange(isNaN(num) ? undefined : num);
                                 }
@@ -412,7 +451,7 @@ export function TassologistInterpretationForm({
               </Button>
               <FormMessage>{form.formState.errors.manualSymbols?.message || form.formState.errors.manualSymbols?.root?.message}</FormMessage>
             </div>
-            
+
             <FormField
               control={form.control}
               name="manualInterpretation"
@@ -420,17 +459,30 @@ export function TassologistInterpretationForm({
                 <FormItem>
                   <FormLabel className="flex items-center justify-between w-full">
                     <span><Sparkles className="inline mr-1 h-4 w-4 text-muted-foreground" /> Your Interpretation</span>
-                     <Button 
-                        type="button" 
-                        onClick={handleStartStopDictation} 
-                        variant={isRecording ? "destructive" : "outline"} 
-                        size="sm" 
-                        disabled={dictationButtonDisabled} 
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        onClick={handleExtractSymbols}
+                        variant="outline"
+                        size="sm"
+                        disabled={getSymbolsButtonDisabled}
+                        className="flex items-center"
+                      >
+                        {isExtractingSymbols ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanSearch className="mr-2 h-4 w-4" />}
+                        Get Symbols
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleStartStopDictation}
+                        variant={isRecording ? "destructive" : "outline"}
+                        size="sm"
+                        disabled={dictationButtonDisabled}
                         className="flex items-center"
                       >
                         {isRecording ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mic className="mr-2 h-4 w-4" />}
                         {dictationButtonText}
                       </Button>
+                    </div>
                   </FormLabel>
                   <FormControl>
                     <Textarea
@@ -447,14 +499,14 @@ export function TassologistInterpretationForm({
             />
 
             <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
-               <Button 
-                type="button" 
-                onClick={() => handleFormSubmitInternal('draft')} 
+               <Button
+                type="button"
+                onClick={() => handleFormSubmitInternal('draft')}
                 disabled={overallProcessing}
-                variant="outline" 
+                variant="outline"
                 className="w-full sm:w-auto"
               >
-                {isSubmittingForm && form.formState.submitCount > 0 && form.formState.isSubmitting && (!canComplete || form.getValues('manualInterpretation').trim().length < 10) ? ( 
+                {isSubmittingForm && form.formState.submitCount > 0 && form.formState.isSubmitting && (!canComplete || form.getValues('manualInterpretation').trim().length < 10) ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Saving Draft...
@@ -466,13 +518,13 @@ export function TassologistInterpretationForm({
                   </>
                 )}
               </Button>
-              <Button 
-                type="button" 
-                onClick={() => handleFormSubmitInternal('complete')} 
-                disabled={overallProcessing || !canComplete} 
+              <Button
+                type="button"
+                onClick={() => handleFormSubmitInternal('complete')}
+                disabled={overallProcessing || !canComplete}
                 className="w-full sm:w-auto"
               >
-                 {isSubmittingForm && form.formState.submitCount > 0 && form.formState.isSubmitting && canComplete ? ( 
+                 {isSubmittingForm && form.formState.submitCount > 0 && form.formState.isSubmitting && canComplete ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Completing...
@@ -491,4 +543,3 @@ export function TassologistInterpretationForm({
     </Card>
   );
 }
-
