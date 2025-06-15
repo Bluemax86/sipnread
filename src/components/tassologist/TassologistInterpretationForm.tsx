@@ -182,13 +182,14 @@ export function TassologistInterpretationForm({
       return;
     } else {
       toast({ variant: "destructive", title: "Browser Not Supported", description: "Speech recognition is not supported by your browser." });
+      // Fallback or alternative dictation method could be placed here if needed
+      // For now, if the API isn't supported, we just inform the user and do nothing further.
       return;
     }
 
-    // Server-side dictation code (Preserved)
-    if (false) { // This block is effectively dead code now.
-      const originalIsRecording = false;
-      if (originalIsRecording) {
+    // Server-side dictation code (Preserved but not currently reachable if client-side API is supported)
+    if (false) { 
+      if (isRecording) {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
           mediaRecorderRef.current.stop();
         }
@@ -412,7 +413,7 @@ export function TassologistInterpretationForm({
                               } else {
                                 const num = Number(rawValue);
                                 if (!isNaN(num) && num < 0) {
-                                  field.onChange(0);
+                                  field.onChange(0); // Clamp to 0 if negative
                                 } else {
                                   field.onChange(isNaN(num) ? undefined : num);
                                 }
@@ -457,9 +458,9 @@ export function TassologistInterpretationForm({
               name="manualInterpretation"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="flex items-center justify-between w-full">
+                  <FormLabel className="flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between w-full">
                     <span><Sparkles className="inline mr-1 h-4 w-4 text-muted-foreground" /> Your Interpretation</span>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2 w-full md:w-auto justify-start md:justify-end">
                       <Button
                         type="button"
                         onClick={handleExtractSymbols}
