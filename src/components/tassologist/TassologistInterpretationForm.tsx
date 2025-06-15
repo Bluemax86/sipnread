@@ -119,9 +119,10 @@ export function TassologistInterpretationForm({
         if (recognitionRef.current) {
           recognitionRef.current.stop();
         }
-        return;
+        return; // Exit if already recording and stop() was called
       }
 
+      // Not recording, so start new recognition
       recognitionRef.current = new SpeechRecognitionAPI();
       recognitionRef.current.continuous = true; 
       recognitionRef.current.interimResults = true; 
@@ -149,52 +150,56 @@ export function TassologistInterpretationForm({
 
       recognitionRef.current.onend = () => {
         setIsRecording(false);
-        if (recognitionRef.current) {
+        if (recognitionRef.current) { // Clean up event handlers
             recognitionRef.current.onresult = null;
             recognitionRef.current.onstart = null;
             recognitionRef.current.onend = null;
             recognitionRef.current.onerror = null;
         }
-        recognitionRef.current = null;
+        recognitionRef.current = null; // Release the instance
         toast({ title: "Dictation Stopped" });
       };
 
       recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error("Speech recognition error:", event.error, event.message);
         toast({ variant: "destructive", title: "Dictation Error", description: event.error || event.message || "Unknown dictation error" });
-        setIsRecording(false);
+        setIsRecording(false); // Ensure recording state is updated on error
         if (recognitionRef.current) {
-          recognitionRef.current.stop();
+          recognitionRef.current.stop(); // Attempt to stop if not already stopped
         }
         recognitionRef.current = null;
       };
 
       try {
+        // Ensure microphone permission (modern browsers might re-prompt or use existing permission)
         await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (recognitionRef.current) {
+        if (recognitionRef.current) { // Check again in case of race conditions or quick UI interaction
           recognitionRef.current.start();
         }
       } catch (err) {
         console.error("Error getting microphone permission:", err);
         toast({ variant: "destructive", title: "Microphone Error", description: "Could not access microphone. Please check permissions." });
-        setIsRecording(false); 
+        setIsRecording(false); // Reset state if permission fails
       }
-      return; 
+      return; // Important: return here to prevent falling through to server-side logic
     } else {
       toast({ variant: "destructive", title: "Browser Not Supported", description: "Speech recognition is not supported by your browser." });
-      return; 
+      return; // Explicitly return if API not supported
     }
 
-    // Existing server-side dictation code (preserved but not executed by this button's new primary path)
-    if (true) { 
-      const originalIsRecording = false; 
-      if (originalIsRecording) { 
+    // ----- Server-side dictation code (Preserved but not primary path now) -----
+    // This block is now effectively "dead code" if SpeechRecognitionAPI is supported.
+    // It's kept here as per your request not to remove it.
+    if (true) { // This condition can be removed or set to false if you never want it to run
+      const originalIsRecording = false; // Simulating old state if we were to use this path
+      if (originalIsRecording) { // This 'if' block for stopping server recording is effectively unreachable
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
           mediaRecorderRef.current.stop();
         }
         return;
       }
 
+      // Logic to start server-side recording (MediaRecorder)
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const options = { mimeType: 'audio/webm;codecs=opus' };
@@ -309,7 +314,8 @@ export function TassologistInterpretationForm({
 
   const overallProcessing = isSubmittingForm; 
   
-  const dictationButtonText = isRecording ? "Stop Dictation" : "Start Client Dictation";
+  const dictationButtonText = isRecording ? "Stop Dictation" : "Start Dictation";
+  // Button is disabled only when the main form is submitting.
   const dictationButtonDisabled = isSubmittingForm;
 
 
@@ -446,7 +452,7 @@ export function TassologistInterpretationForm({
                 onClick={() => handleFormSubmitInternal('draft')} 
                 disabled={overallProcessing}
                 variant="outline" 
-                className="w-full sm:w-auto text-green-700 border-green-700 hover:bg-green-600 hover:text-green-50 focus-visible:ring-green-500 disabled:text-muted-foreground disabled:border-input disabled:bg-background disabled:hover:bg-background disabled:hover:text-muted-foreground"
+                className="w-full sm:w-auto"
               >
                 {isSubmittingForm && form.formState.submitCount > 0 && form.formState.isSubmitting && (!canComplete || form.getValues('manualInterpretation').trim().length < 10) ? ( 
                   <>
@@ -485,3 +491,4 @@ export function TassologistInterpretationForm({
     </Card>
   );
 }
+
