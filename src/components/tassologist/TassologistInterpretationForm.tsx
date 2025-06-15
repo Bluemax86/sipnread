@@ -23,7 +23,7 @@ const symbolSchema = z.object({
   symbol: z.string().min(1, "Symbol name cannot be empty."),
   position: z.preprocess(
     (val) => (val === "" || val === undefined || val === null) ? undefined : Number(val),
-    z.number().int().min(0).max(12).optional()
+    z.number().int().min(0, "Position must be a non-negative integer.").max(12, "Position must be between 0 and 12.").optional().nullable()
   ).describe("Optional clock position (0-12). 0 or empty for general.")
 });
 
@@ -43,13 +43,31 @@ interface TassologistInterpretationFormProps {
   currentTranscriptionStatus?: TranscriptionStatus;
 }
 
+// TypeScript interfaces for browser SpeechRecognition API if not globally available
+// These might be available in modern lib.dom.d.ts, but included for explicitness
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition;
+    webkitSpeechRecognition: typeof SpeechRecognition;
+  }
+}
+interface SpeechRecognitionEvent extends Event {
+  readonly resultIndex: number;
+  readonly results: SpeechRecognitionResultList;
+}
+interface SpeechRecognitionErrorEvent extends Event {
+  readonly error: string; 
+  readonly message: string;
+}
+
+
 export function TassologistInterpretationForm({ 
   personalizedReadingRequestId, 
   onSubmit, 
   isSubmittingForm, 
   initialData,
-  onNewOperationId,
-  currentTranscriptionStatus
+  onNewOperationId, // This prop is for the server-side flow, kept for code integrity
+  currentTranscriptionStatus // This prop is for the server-side flow, kept for code integrity
 }: TassologistInterpretationFormProps) {
   const form = useForm<TassologistInterpretationFormValues>({
     resolver: zodResolver(tassologistInterpretationSchema),
@@ -65,15 +83,20 @@ export function TassologistInterpretationForm({
     name: "manualSymbols",
   });
 
+  // 'isRecording' state now refers to client-side speech recognition
   const [isRecording, setIsRecording] = useState(false);
+  // 'isProcessingAudio' is for the server-side flow, kept for code integrity
   const [isProcessingAudio, setIsProcessingAudio] = useState(false);
   
+  // Ref for client-side SpeechRecognition instance
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  // Refs for server-side MediaRecorder flow, kept for code integrity
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Populate the entire form only on initial mount if initialData is present
     if (initialData) {
       form.reset({
         manualSymbols: initialData.manualSymbols && initialData.manualSymbols.length > 0 
@@ -83,11 +106,9 @@ export function TassologistInterpretationForm({
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array ensures this runs only on mount
+  }, []); 
 
   useEffect(() => {
-    // This effect specifically watches for changes to initialData.manualInterpretation
-    // (e.g., when a transcript is fetched by the parent) and updates only that field.
     if (initialData?.manualInterpretation !== undefined && 
         initialData.manualInterpretation !== form.getValues('manualInterpretation')) {
       form.setValue('manualInterpretation', initialData.manualInterpretation);
@@ -96,106 +117,201 @@ export function TassologistInterpretationForm({
 
 
   const handleStartStopDictation = async () => {
-    if (isRecording) {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-      setIsRecording(false);
-      return;
-    }
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const options = { mimeType: 'audio/webm;codecs=opus' };
-      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-         toast({ variant: "destructive", title: "Unsupported Format", description: "WebM Opus audio is not supported by your browser." });
-         return;
-      }
-      mediaRecorderRef.current = new MediaRecorder(stream, options);
-      audioChunksRef.current = [];
-
-      mediaRecorderRef.current.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
-      };
-
-      mediaRecorderRef.current.onstop = async () => {
-        stream.getTracks().forEach(track => track.stop());
-        if (audioChunksRef.current.length === 0) {
-          toast({ variant: "destructive", title: "Recording Error", description: "No audio data was recorded." });
-          setIsProcessingAudio(false);
-          return;
+    // --- New Client-Side Speech Recognition Logic ---
+    if (SpeechRecognitionAPI) {
+      if (isRecording) { // User clicked "Stop Dictation"
+        if (recognitionRef.current) {
+          recognitionRef.current.stop();
         }
-        
-        const audioBlob = new Blob(audioChunksRef.current, { type: options.mimeType });
-        
-        if (!user) {
-          toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in." });
-          setIsProcessingAudio(false);
-          return;
-        }
+        // setIsRecording(false); // onend will handle this
+        return;
+      }
 
-        setIsProcessingAudio(true);
-        toast({ title: "Processing Dictation...", description: "Uploading and starting transcription." });
+      // User clicked "Start Dictation"
+      recognitionRef.current = new SpeechRecognitionAPI();
+      recognitionRef.current.continuous = true; // Keep listening
+      recognitionRef.current.interimResults = true; // Show interim results (though we only append final ones)
+      recognitionRef.current.lang = 'en-US';
 
-        const reader = new FileReader();
-        reader.readAsDataURL(audioBlob);
-        reader.onloadend = async () => {
-          const base64Audio = reader.result as string;
-          const audioDataOnly = base64Audio.split(',')[1];
+      let currentFinalTranscript = form.getValues('manualInterpretation') || '';
 
-          try {
-            const functions = getFunctions(firebaseApp);
-            const processAndTranscribeAudio = httpsCallable<
-              ProcessAndTranscribeAudioCallableInput,
-              { success: boolean; operationName?: string; message?: string } 
-            >(functions, 'processAndTranscribeAudioCallable');
-
-            const payload: ProcessAndTranscribeAudioCallableInput = {
-              audioBase64: audioDataOnly,
-              personalizedReadingRequestId,
-              mimeType: options.mimeType,
-            };
-            
-            const result = await processAndTranscribeAudio(payload);
-
-            if (result && result.data && result.data.success && result.data.operationName) {
-              toast({ title: "Transcription Started", description: `Processing in background.` });
-              if (onNewOperationId) {
-                onNewOperationId(result.data.operationName); 
-              }
-            } else {
-              const errorMessage = result?.data?.message || "Could not start transcription.";
-              toast({ variant: "destructive", title: "Transcription Start Failed", description: errorMessage });
-            }
-          } catch (error: unknown) {
-            const callableError = error as FunctionsError; 
-            let description = "An error occurred during audio processing.";
-            if (callableError.message) {
-              description = callableError.message;
-            }
-            toast({ variant: "destructive", title: "Callable Error", description });
-          } finally {
-            setIsProcessingAudio(false);
+      recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+        let newFinalizedSegment = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            newFinalizedSegment += event.results[i][0].transcript + ' ';
           }
-        };
-        reader.onerror = () => {
-          toast({ variant: "destructive", title: "File Read Error", description: "Could not read audio data for processing." });
-          setIsProcessingAudio(false);
-        };
+        }
+        if (newFinalizedSegment) {
+          currentFinalTranscript = (currentFinalTranscript ? currentFinalTranscript.trim() + ' ' : '') + newFinalizedSegment.trim();
+          form.setValue('manualInterpretation', currentFinalTranscript);
+        }
       };
 
-      mediaRecorderRef.current.start();
-      setIsRecording(true);
-      toast({ title: "Recording Started", description: "Speak now. Click again to stop and process."});
-    } catch (err) {
-      console.error("Error accessing microphone:", err);
-      toast({ variant: "destructive", title: "Microphone Error", description: "Could not access microphone. Please check permissions." });
-      setIsRecording(false);
+      recognitionRef.current.onstart = () => {
+        setIsRecording(true);
+        toast({ title: "Listening...", description: "Speak now. Click 'Stop Dictation' when done."});
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsRecording(false);
+        if (recognitionRef.current) {
+            recognitionRef.current.onresult = null;
+            recognitionRef.current.onstart = null;
+            recognitionRef.current.onend = null;
+            recognitionRef.current.onerror = null;
+        }
+        recognitionRef.current = null;
+        toast({ title: "Dictation Stopped" });
+      };
+
+      recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+        console.error("Speech recognition error:", event.error, event.message);
+        toast({ variant: "destructive", title: "Dictation Error", description: event.error || event.message || "Unknown dictation error" });
+        setIsRecording(false);
+        if (recognitionRef.current) {
+          recognitionRef.current.stop();
+        }
+        recognitionRef.current = null;
+      };
+
+      try {
+        // Check for microphone permission (optional, browser usually prompts)
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (recognitionRef.current) {
+          recognitionRef.current.start();
+        }
+      } catch (err) {
+        console.error("Error getting microphone permission:", err);
+        toast({ variant: "destructive", title: "Microphone Error", description: "Could not access microphone. Please check permissions." });
+        setIsRecording(false); // Reset recording state if permission fails
+      }
+      return; // Exit after handling client-side path
+    } else {
+      toast({ variant: "destructive", title: "Browser Not Supported", description: "Speech recognition is not supported by your browser." });
+      return; // Exit if API not supported
     }
+
+    // --- Start of existing server-side dictation code (PRESERVED BUT NOT EXECUTED by this button's new primary path) ---
+    // This code block will not be reached if SpeechRecognitionAPI is available because of the 'return' statements above.
+    // It is kept in the file as per user request "Leave all the code for the current dictation in place".
+    // The 'isRecording' here refers to the original server-side context, shadowing the one for client-side.
+    if (true) { // This 'if(true)' is just to make the block parsable and visually distinct.
+      const originalIsRecording = false; // Placeholder to avoid name collision if JS were to run this
+      if (originalIsRecording) { 
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.stop();
+        }
+        // setIsRecording(false); // This would be for the original server-side state
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const options = { mimeType: 'audio/webm;codecs=opus' };
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+           toast({ variant: "destructive", title: "Unsupported Format (Server)", description: "WebM Opus audio is not supported by your browser for server upload." });
+           return;
+        }
+        mediaRecorderRef.current = new MediaRecorder(stream, options);
+        audioChunksRef.current = [];
+
+        mediaRecorderRef.current.ondataavailable = (event) => {
+          audioChunksRef.current.push(event.data);
+        };
+
+        mediaRecorderRef.current.onstop = async () => {
+          stream.getTracks().forEach(track => track.stop());
+          if (audioChunksRef.current.length === 0) {
+            toast({ variant: "destructive", title: "Recording Error (Server)", description: "No audio data was recorded for server processing." });
+            setIsProcessingAudio(false);
+            return;
+          }
+          
+          const audioBlob = new Blob(audioChunksRef.current, { type: options.mimeType });
+          
+          if (!user) {
+            toast({ variant: "destructive", title: "Authentication Error (Server)", description: "You must be logged in for server processing." });
+            setIsProcessingAudio(false);
+            return;
+          }
+
+          setIsProcessingAudio(true);
+          toast({ title: "Processing Dictation (Server)...", description: "Uploading and starting transcription." });
+
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          reader.onloadend = async () => {
+            const base64Audio = reader.result as string;
+            const audioDataOnly = base64Audio.split(',')[1];
+
+            try {
+              const functions = getFunctions(firebaseApp);
+              const processAndTranscribeAudio = httpsCallable<
+                ProcessAndTranscribeAudioCallableInput,
+                { success: boolean; operationName?: string; message?: string } 
+              >(functions, 'processAndTranscribeAudioCallable');
+
+              const payload: ProcessAndTranscribeAudioCallableInput = {
+                audioBase64: audioDataOnly,
+                personalizedReadingRequestId,
+                mimeType: options.mimeType,
+              };
+              
+              const result = await processAndTranscribeAudio(payload);
+
+              if (result && result.data && result.data.success && result.data.operationName) {
+                toast({ title: "Transcription Started (Server)", description: `Processing in background.` });
+                if (onNewOperationId) {
+                  onNewOperationId(result.data.operationName); 
+                }
+              } else {
+                const errorMessage = result?.data?.message || "Could not start server transcription.";
+                toast({ variant: "destructive", title: "Server Transcription Start Failed", description: errorMessage });
+              }
+            } catch (error: unknown) {
+              const callableError = error as FunctionsError; 
+              let description = "An error occurred during server audio processing.";
+              if (callableError.message) {
+                description = callableError.message;
+              }
+              toast({ variant: "destructive", title: "Server Callable Error", description });
+            } finally {
+              setIsProcessingAudio(false);
+            }
+          };
+          reader.onerror = () => {
+            toast({ variant: "destructive", title: "File Read Error (Server)", description: "Could not read audio data for server processing." });
+            setIsProcessingAudio(false);
+          };
+        };
+
+        mediaRecorderRef.current.start();
+        // setIsRecording(true); // This would be for the original server-side state
+        toast({ title: "Recording Started (Server)", description: "Speak now. Click again to stop and process."});
+      } catch (err) {
+        console.error("Error accessing microphone (Server):", err);
+        toast({ variant: "destructive", title: "Microphone Error (Server)", description: "Could not access microphone. Please check permissions." });
+        // setIsRecording(false); // This would be for the original server-side state
+      }
+    }
+    // --- End of existing server-side dictation code ---
   };
   
   useEffect(() => {
     return () => { 
+      // Clean up client-side recognition if active
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onstart = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current = null;
+      }
+      // Clean up server-side MediaRecorder if it was somehow active (though it shouldn't be by this button)
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
@@ -209,14 +325,13 @@ export function TassologistInterpretationForm({
     return form.handleSubmit((data) => onSubmit(data, saveType))();
   };
 
-  const overallProcessing = isSubmittingForm || isRecording || isProcessingAudio;
+  // Button is disabled if form is submitting OR client-side recording is active
+  const overallProcessing = isSubmittingForm || isRecording; 
   
-  const dictationButtonDisabled = isSubmittingForm || isProcessingAudio || currentTranscriptionStatus === 'pending';
-  const dictationButtonText = 
-    isRecording ? "Stop Dictation" :
-    isProcessingAudio ? "Processing Audio..." :
-    currentTranscriptionStatus === 'pending' ? "Transcription Pending..." :
-    "Start Dictation";
+  // Dictation button text and disabled state for NEW client-side dictation
+  const dictationButtonText = isRecording ? "Stop Dictation" : "Start Client Dictation";
+  const dictationButtonDisabled = isSubmittingForm || isRecording;
+
 
   const interpretationValue = form.watch('manualInterpretation');
   const canComplete = interpretationValue && interpretationValue.trim().length >= 10;
@@ -261,9 +376,10 @@ export function TassologistInterpretationForm({
                             id={`position-${index}`}
                             type="number"
                             min="0" 
+                            max="12"
                             placeholder="Pos (0-12)"
                             {...field}
-                            value={field.value === undefined ? '' : String(field.value)}
+                            value={field.value === undefined || field.value === null ? '' : String(field.value)}
                             onChange={e => {
                               const rawValue = e.target.value;
                               if (rawValue === '') {
@@ -271,10 +387,9 @@ export function TassologistInterpretationForm({
                               } else {
                                 const num = Number(rawValue);
                                 if (!isNaN(num) && num < 0) {
-                                  field.onChange(0); // Correct negative input to 0
+                                  field.onChange(0); 
                                 } else {
-                                  // Pass Number-converted value; Zod will validate if it's a valid number, int, and within range.
-                                  field.onChange(Number(rawValue));
+                                  field.onChange(isNaN(num) ? undefined : num);
                                 }
                               }
                             }}
@@ -324,10 +439,10 @@ export function TassologistInterpretationForm({
                         onClick={handleStartStopDictation} 
                         variant={isRecording ? "destructive" : "outline"} 
                         size="sm" 
-                        disabled={dictationButtonDisabled}
+                        disabled={dictationButtonDisabled} // Uses new client-side logic
                         className="flex items-center"
                       >
-                        {isRecording || isProcessingAudio ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mic className="mr-2 h-4 w-4" />}
+                        {isRecording ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mic className="mr-2 h-4 w-4" />}
                         {dictationButtonText}
                       </Button>
                   </FormLabel>
@@ -346,14 +461,14 @@ export function TassologistInterpretationForm({
             />
 
             <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
-              <Button 
+               <Button 
                 type="button" 
                 onClick={() => handleFormSubmitInternal('draft')} 
-                disabled={overallProcessing} 
+                disabled={overallProcessing}
                 variant="outline" 
-                className="w-full sm:w-auto text-green-700 border-green-700 hover:bg-green-600 hover:text-green-50 focus-visible:ring-green-500 disabled:text-muted-foreground disabled:border-input disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+                className="w-full sm:w-auto text-green-700 border-green-700 hover:bg-green-600 hover:text-green-50 focus-visible:ring-green-500 disabled:text-muted-foreground disabled:border-input disabled:bg-background disabled:hover:bg-background disabled:hover:text-muted-foreground"
               >
-                {isSubmittingForm && form.formState.submitCount > 0 && form.formState.isSubmitting && (form.getValues('manualInterpretation').trim().length < 10 || !canComplete) ? ( 
+                {isSubmittingForm && form.formState.submitCount > 0 && form.formState.isSubmitting && (!canComplete || form.getValues('manualInterpretation').trim().length < 10) ? ( 
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Saving Draft...
@@ -390,3 +505,4 @@ export function TassologistInterpretationForm({
     </Card>
   );
 }
+
