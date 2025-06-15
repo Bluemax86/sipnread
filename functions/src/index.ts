@@ -11,8 +11,8 @@
 import { HttpsError, onCall, type HttpsOptions } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { z } from "zod";
-// import { SpeechClient } from '@google-cloud/speech';
-// import { Storage } from '@google-cloud/storage';
+import { SpeechClient } from '@google-cloud/speech';
+import { Storage } from '@google-cloud/storage';
 
 // Initialize Firebase Admin SDK
 if (admin.apps.length === 0) {
@@ -22,32 +22,31 @@ if (admin.apps.length === 0) {
 const adminDb = admin.firestore();
 
 // SDK Clients - Initialize them once globally.
-// let speechClient: SpeechClient;
-// let storage: Storage;
+let speechClient: SpeechClient;
+let storage: Storage;
 
-/*
+
 try {
     console.log('[Global Init] Attempting to initialize SpeechClient...');
-    // speechClient = new SpeechClient(); 
-    console.log('[Global Init] SpeechClient initialization skipped (currently unused).');
+    speechClient = new SpeechClient(); 
+    console.log('[Global Init] SpeechClient initialized successfully.');
 } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error ? e.stack : undefined;
     console.error('[Global Init] CRITICAL: Failed to initialize SpeechClient:', message, stack);
 }
-*/
 
-/*
+
 try {
     console.log('[Global Init] Attempting to initialize Storage client...');
-    // storage = new Storage(); 
-    console.log('[Global Init] Storage client initialization skipped (currently unused).');
+    storage = new Storage(); 
+    console.log('[Global Init] Storage client initialized successfully.');
 } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error ? e.stack : undefined;
     console.error('[Global Init] CRITICAL: Failed to initialize Storage client:', message, stack);
 }
-*/
+
 
 
 // Zod schema for input validation for updateUserProfileCallable
@@ -270,7 +269,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
 
 const ManualSymbolCallableSchema = z.object({
   symbol: z.string(),
-  position: z.number().optional(),
+  position: z.number().optional().nullable(), // Allow null for position
 });
 
 const StoredManualSymbolSchema = z.object({
@@ -283,7 +282,7 @@ const SaveTassologistInterpretationCallableInputSchema = z.object({
   requestId: z.string().min(1),
   originalReadingId: z.string().min(1),
   manualSymbols: z.array(ManualSymbolCallableSchema),
-  manualInterpretation: z.string().min(1, "Interpretation cannot be empty."),
+  manualInterpretation: z.string().optional().nullable(), // Allow empty/null for draft
   saveType: z.enum(['complete', 'draft']),
 });
 export type SaveTassologistInterpretationCallableInput = z.infer<typeof SaveTassologistInterpretationCallableInputSchema>;
@@ -311,6 +310,14 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
   try {
     const validatedData = SaveTassologistInterpretationCallableInputSchema.parse(data);
 
+    // Additional validation for 'complete' save type
+    if (validatedData.saveType === 'complete') {
+      if (!validatedData.manualInterpretation || validatedData.manualInterpretation.trim().length < 10) {
+        throw new HttpsError("invalid-argument", "Interpretation must be at least 10 characters long when completing a reading.");
+      }
+    }
+
+
     const batch = adminDb.batch();
     const currentTime = admin.firestore.FieldValue.serverTimestamp();
 
@@ -323,7 +330,7 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
 
     batch.update(readingDocRef, {
       manualSymbolsDetected: symbolsToStore,
-      manualInterpretation: validatedData.manualInterpretation,
+      manualInterpretation: validatedData.manualInterpretation || "", // Store empty string if null/undefined
       updatedAt: currentTime,
     });
 
@@ -386,6 +393,10 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
     console.error(`[saveTassologistInterpretationCallable] Error:`, error);
     if (error instanceof z.ZodError) {
       throw new HttpsError("invalid-argument", `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`);
+    }
+    // If it's already an HttpsError (like the one we throw for interpretation length), rethrow it
+    if (error instanceof HttpsError) {
+      throw error;
     }
     const message = error instanceof Error ? error.message : "Failed to save Tassologist interpretation.";
     throw new HttpsError("internal", message);
@@ -456,38 +467,7 @@ const processAudioCallableOptions: HttpsOptions = {
 };
 
 export const processAndTranscribeAudioCallable = onCall(processAudioCallableOptions, async (callableRequest) => {
-  console.log('[processAndTranscribeAudioCallable] INVOKED (Simplified for Debugging).');
-
-  if (!callableRequest.auth) {
-    console.error("[processAndTranscribeAudioCallable] Authentication failed: No auth context.");
-    throw new HttpsError("unauthenticated", "The function must be called by an authenticated Tassologist.");
-  }
-  const tassologistId = callableRequest.auth.uid;
-  const data = callableRequest.data as ProcessAndTranscribeAudioCallableInput;
-  console.log(`[processAndTranscribeAudioCallable] Received data for request ID: ${data?.personalizedReadingRequestId}, Tassologist: ${tassologistId}, MIME Type: ${data?.mimeType}`);
-
-  // ---- SIMPLIFIED LOGIC FOR DEBUGGING ----
-  try {
-    // Simulate some work
-    await new Promise(resolve => setTimeout(resolve, 50)); // Short delay
-
-    console.log('[processAndTranscribeAudioCallable] Simplified logic returning dummy success.');
-    return { success: true, operationName: "dummy-operation-" + Date.now(), message: "Audio processed (dummy) and transcription started (dummy)." };
-
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error in simplified logic";
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    let errorDetails: unknown;
-    if (typeof error === 'object' && error !== null && 'details' in error) {
-        errorDetails = (error as { details: unknown }).details;
-    }
-    console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR (Simplified Debugging Catch) for Tassologist ${tassologistId}, request ${data?.personalizedReadingRequestId || 'UNKNOWN_REQUEST_ID'}:`, errorMessage, errorStack, errorDetails);
-    console.error(`[processAndTranscribeAudioCallable] RAW ERROR OBJECT (Simplified Debugging Catch):`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
-    throw new HttpsError("internal", "Simplified function encountered an error: " + errorMessage);
-  }
-
-  // ---- ORIGINAL LOGIC COMMENTED OUT FOR DEBUGGING ----
-  /*
+  
   if (!speechClient || !storage) {
     console.error('[processAndTranscribeAudioCallable] CRITICAL: SpeechClient or Storage client not initialized. Function cannot proceed.');
     throw new HttpsError("internal", "Core services not initialized. Check server logs.");
@@ -497,9 +477,9 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     console.error("[processAndTranscribeAudioCallable] Authentication failed: No auth context.");
     throw new HttpsError("unauthenticated", "The function must be called by an authenticated Tassologist.");
   }
-  // const tassologistId = callableRequest.auth.uid; 
-  // const data = callableRequest.data as ProcessAndTranscribeAudioCallableInput; 
-  // console.log(`[processAndTranscribeAudioCallable] Received data for request ID: ${data.personalizedReadingRequestId}, Tassologist: ${tassologistId}, MIME Type: ${data.mimeType}`);
+  const tassologistId = callableRequest.auth.uid; 
+  const data = callableRequest.data as ProcessAndTranscribeAudioCallableInput; 
+  console.log(`[processAndTranscribeAudioCallable] Received data for request ID: ${data.personalizedReadingRequestId}, Tassologist: ${tassologistId}, MIME Type: ${data.mimeType}`);
 
   try {
     const validatedData = ProcessAndTranscribeAudioCallableInputSchema.parse(data);
@@ -508,18 +488,32 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     const { audioBase64, personalizedReadingRequestId, mimeType } = validatedData;
 
     const GCLOUD_STORAGE_BUCKET_ENV = process.env.GCLOUD_STORAGE_BUCKET;
-    const GCP_PROJECT_ENV = process.env.GCP_PROJECT;
-    const GOOGLE_CLOUD_PROJECT_ENV = process.env.GOOGLE_CLOUD_PROJECT;
+    let bucketName = GCLOUD_STORAGE_BUCKET_ENV;
 
-    console.log(`[processAndTranscribeAudioCallable] ENV Vars: GCLOUD_STORAGE_BUCKET=${GCLOUD_STORAGE_BUCKET_ENV}, GCP_PROJECT=${GCP_PROJECT_ENV}, GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT_ENV}`);
+    if (!bucketName) {
+      try {
+        const defaultBucket = admin.storage().bucket();
+        bucketName = defaultBucket.name;
+        console.log(`[processAndTranscribeAudioCallable] Using default bucket from Admin SDK: ${bucketName}`);
+      } catch (adminSDKError) {
+        console.error("[processAndTranscribeAudioCallable] Error getting default bucket from Admin SDK:", adminSDKError);
+        // Fallback to project ID based naming if Admin SDK fails
+        const GCP_PROJECT_ENV = process.env.GCP_PROJECT;
+        const GOOGLE_CLOUD_PROJECT_ENV = process.env.GOOGLE_CLOUD_PROJECT;
+        bucketName = `${GCP_PROJECT_ENV || GOOGLE_CLOUD_PROJECT_ENV}.appspot.com`;
+        console.log(`[processAndTranscribeAudioCallable] Falling back to constructed bucket name: ${bucketName}`);
+      }
+    } else {
+        console.log(`[processAndTranscribeAudioCallable] Using bucket from GCLOUD_STORAGE_BUCKET env var: ${bucketName}`);
+    }
 
-    const bucketName = GCLOUD_STORAGE_BUCKET_ENV || `${GCP_PROJECT_ENV || GOOGLE_CLOUD_PROJECT_ENV}.appspot.com`;
 
-    if (!bucketName || bucketName.includes("undefined") || bucketName === ".appspot.com") {
-        console.error("[processAndTranscribeAudioCallable] GCS bucket name could not be determined or is invalid. Ensure GCLOUD_STORAGE_BUCKET or GCP_PROJECT/GOOGLE_CLOUD_PROJECT env var is set. Current bucketName:", bucketName);
+    if (!bucketName || bucketName.includes("undefined") || bucketName === ".appspot.com" || bucketName.trim() === "") {
+        console.error("[processAndTranscribeAudioCallable] GCS bucket name could not be determined or is invalid. Ensure GCLOUD_STORAGE_BUCKET or GCP_PROJECT/GOOGLE_CLOUD_PROJECT env var is set, or Firebase Admin SDK is correctly initialized. Current bucketName:", bucketName);
         throw new HttpsError("internal", "Storage bucket configuration error. Bucket name missing or invalid.");
     }
-    console.log(`[processAndTranscribeAudioCallable] Using bucket: ${bucketName}`);
+    console.log(`[processAndTranscribeAudioCallable] Final bucket for use: ${bucketName}`);
+
 
     const audioBuffer = Buffer.from(audioBase64, 'base64');
     const audioFileExtension = mimeType.split('/')[1] || 'webm';
@@ -540,7 +534,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     const configRec = {
       languageCode: 'en-US',
       enableAutomaticPunctuation: true,
-      model: 'long',
+      model: 'latest_long', // Corrected model
       audioChannelCount: 1,
       enableWordTimeOffsets: false,
     };
@@ -626,8 +620,9 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     }
 
     console.log(`[processAndTranscribeAudioCallable] Throwing HttpsError to client with message: ${errorMessage}`);
+    if (error instanceof HttpsError) throw error; // Re-throw if it's already an HttpsError
     throw new HttpsError("internal", errorMessage);
   }
-  */
 });
+
 
