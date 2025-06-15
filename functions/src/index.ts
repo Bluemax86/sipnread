@@ -269,7 +269,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
 
 const ManualSymbolCallableSchema = z.object({
   symbol: z.string(),
-  position: z.number().optional().nullable(), // Allow null for position
+  position: z.number().int().min(0, "Position must be between 0 and 12.").max(12, "Position must be between 0 and 12.").optional().nullable(),
 });
 
 const StoredManualSymbolSchema = z.object({
@@ -422,7 +422,7 @@ export const markPersonalizedReadingAsReadCallable = onCall(async (request) => {
     const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
     const requestDocSnap = await requestDocRef.get();
 
-    if (!requestDocSnap.exists) { 
+    if (!requestDocSnap.exists()) { 
       throw new HttpsError("not-found", "Personalized reading request not found.");
     }
 
@@ -624,5 +624,6 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     throw new HttpsError("internal", errorMessage);
   }
 });
+
 
 
