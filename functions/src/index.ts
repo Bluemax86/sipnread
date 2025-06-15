@@ -269,8 +269,13 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
 
 const ManualSymbolCallableSchema = z.object({
   symbol: z.string(),
-  position: z.number().int().min(0, "Position must be between 0 and 12.").max(12, "Position must be between 0 and 12.").optional().nullable(),
+  position: z.preprocess( // Ensure empty strings or null are treated as undefined for optional validation
+    (val) => (val === "" || val === null ? undefined : val),
+    z.number().int().min(0, "Position must be a non-negative integer.").max(12, "Position must be between 0 and 12.")
+    .optional()
+  ).nullable(), // Allow null to pass through from client if undefined was sent
 });
+
 
 const StoredManualSymbolSchema = z.object({
   symbolName: z.string(),
@@ -282,7 +287,7 @@ const SaveTassologistInterpretationCallableInputSchema = z.object({
   requestId: z.string().min(1),
   originalReadingId: z.string().min(1),
   manualSymbols: z.array(ManualSymbolCallableSchema),
-  manualInterpretation: z.string().optional().nullable(), // Allow empty/null for draft
+  manualInterpretation: z.string().optional().nullable(), 
   saveType: z.enum(['complete', 'draft']),
 });
 export type SaveTassologistInterpretationCallableInput = z.infer<typeof SaveTassologistInterpretationCallableInputSchema>;
@@ -310,7 +315,6 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
   try {
     const validatedData = SaveTassologistInterpretationCallableInputSchema.parse(data);
 
-    // Additional validation for 'complete' save type
     if (validatedData.saveType === 'complete') {
       if (!validatedData.manualInterpretation || validatedData.manualInterpretation.trim().length < 10) {
         throw new HttpsError("invalid-argument", "Interpretation must be at least 10 characters long when completing a reading.");
@@ -330,7 +334,7 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
 
     batch.update(readingDocRef, {
       manualSymbolsDetected: symbolsToStore,
-      manualInterpretation: validatedData.manualInterpretation || "", // Store empty string if null/undefined
+      manualInterpretation: validatedData.manualInterpretation || "", 
       updatedAt: currentTime,
     });
 
@@ -394,7 +398,6 @@ export const saveTassologistInterpretationCallable = onCall(async (request) => {
     if (error instanceof z.ZodError) {
       throw new HttpsError("invalid-argument", `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`);
     }
-    // If it's already an HttpsError (like the one we throw for interpretation length), rethrow it
     if (error instanceof HttpsError) {
       throw error;
     }
@@ -422,7 +425,7 @@ export const markPersonalizedReadingAsReadCallable = onCall(async (request) => {
     const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
     const requestDocSnap = await requestDocRef.get();
 
-    if (!requestDocSnap.exists()) { 
+    if (!requestDocSnap.exists) { 
       throw new HttpsError("not-found", "Personalized reading request not found.");
     }
 
@@ -497,11 +500,16 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
         console.log(`[processAndTranscribeAudioCallable] Using default bucket from Admin SDK: ${bucketName}`);
       } catch (adminSDKError) {
         console.error("[processAndTranscribeAudioCallable] Error getting default bucket from Admin SDK:", adminSDKError);
-        // Fallback to project ID based naming if Admin SDK fails
         const GCP_PROJECT_ENV = process.env.GCP_PROJECT;
         const GOOGLE_CLOUD_PROJECT_ENV = process.env.GOOGLE_CLOUD_PROJECT;
-        bucketName = `${GCP_PROJECT_ENV || GOOGLE_CLOUD_PROJECT_ENV}.appspot.com`;
-        console.log(`[processAndTranscribeAudioCallable] Falling back to constructed bucket name: ${bucketName}`);
+        const projectId = GCP_PROJECT_ENV || GOOGLE_CLOUD_PROJECT_ENV;
+        if (projectId) {
+          bucketName = `${projectId}.appspot.com`;
+          console.log(`[processAndTranscribeAudioCallable] Falling back to constructed bucket name: ${bucketName}`);
+        } else {
+          console.error("[processAndTranscribeAudioCallable] CRITICAL: Project ID not found in environment variables. Cannot construct bucket name.");
+           throw new HttpsError("internal", "Storage bucket configuration error. Project ID missing.");
+        }
       }
     } else {
         console.log(`[processAndTranscribeAudioCallable] Using bucket from GCLOUD_STORAGE_BUCKET env var: ${bucketName}`);
@@ -534,7 +542,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     const configRec = {
       languageCode: 'en-US',
       enableAutomaticPunctuation: true,
-      model: 'latest_long', // Corrected model
+      model: 'latest_long',
       audioChannelCount: 1,
       enableWordTimeOffsets: false,
     };
@@ -585,7 +593,6 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
       throw new HttpsError("invalid-argument", errorMessage);
     }
     
-    // Using type assertion for gcpError
     const gcpError = error as {code?: string | number; message?: string; details?: string}; 
 
     if (gcpError.code === 'storage/object-not-found') {
@@ -620,10 +627,11 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     }
 
     console.log(`[processAndTranscribeAudioCallable] Throwing HttpsError to client with message: ${errorMessage}`);
-    if (error instanceof HttpsError) throw error; // Re-throw if it's already an HttpsError
+    if (error instanceof HttpsError) throw error; 
     throw new HttpsError("internal", errorMessage);
   }
 });
+
 
 
 

@@ -45,38 +45,36 @@ exports.processAndTranscribeAudioCallable = exports.markPersonalizedReadingAsRea
 const https_1 = require("firebase-functions/v2/https");
 const admin = __importStar(require("firebase-admin"));
 const zod_1 = require("zod");
-// import { SpeechClient } from '@google-cloud/speech';
-// import { Storage } from '@google-cloud/storage';
+const speech_1 = require("@google-cloud/speech");
+const storage_1 = require("@google-cloud/storage");
 // Initialize Firebase Admin SDK
 if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 const adminDb = admin.firestore();
 // SDK Clients - Initialize them once globally.
-// let speechClient: SpeechClient;
-// let storage: Storage;
-/*
+let speechClient;
+let storage;
 try {
     console.log('[Global Init] Attempting to initialize SpeechClient...');
-    // speechClient = new SpeechClient();
-    console.log('[Global Init] SpeechClient initialization skipped (currently unused).');
-} catch (e: unknown) {
+    speechClient = new speech_1.SpeechClient();
+    console.log('[Global Init] SpeechClient initialized successfully.');
+}
+catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error ? e.stack : undefined;
     console.error('[Global Init] CRITICAL: Failed to initialize SpeechClient:', message, stack);
 }
-*/
-/*
 try {
     console.log('[Global Init] Attempting to initialize Storage client...');
-    // storage = new Storage();
-    console.log('[Global Init] Storage client initialization skipped (currently unused).');
-} catch (e: unknown) {
+    storage = new storage_1.Storage();
+    console.log('[Global Init] Storage client initialized successfully.');
+}
+catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error ? e.stack : undefined;
     console.error('[Global Init] CRITICAL: Failed to initialize Storage client:', message, stack);
 }
-*/
 // Zod schema for input validation for updateUserProfileCallable
 const UpdateUserProfileCallableInputSchema = zod_1.z.object({
     name: zod_1.z.string().min(1, "Name is required.").max(100, "Name cannot exceed 100 characters."),
@@ -268,7 +266,7 @@ exports.submitRoxyReadingRequestCallable = (0, https_1.onCall)(async (request) =
 // ---- Save Tassologist Interpretation Callable ----
 const ManualSymbolCallableSchema = zod_1.z.object({
     symbol: zod_1.z.string(),
-    position: zod_1.z.number().optional(),
+    position: zod_1.z.number().int().min(0, "Position must be between 0 and 12.").max(12, "Position must be between 0 and 12.").optional().nullable(),
 });
 const StoredManualSymbolSchema = zod_1.z.object({
     symbolName: zod_1.z.string(),
@@ -278,7 +276,7 @@ const SaveTassologistInterpretationCallableInputSchema = zod_1.z.object({
     requestId: zod_1.z.string().min(1),
     originalReadingId: zod_1.z.string().min(1),
     manualSymbols: zod_1.z.array(ManualSymbolCallableSchema),
-    manualInterpretation: zod_1.z.string().min(1, "Interpretation cannot be empty."),
+    manualInterpretation: zod_1.z.string().optional().nullable(), // Allow empty/null for draft
     saveType: zod_1.z.enum(['complete', 'draft']),
 });
 exports.saveTassologistInterpretationCallable = (0, https_1.onCall)(async (request) => {
@@ -288,6 +286,12 @@ exports.saveTassologistInterpretationCallable = (0, https_1.onCall)(async (reque
     const data = request.data;
     try {
         const validatedData = SaveTassologistInterpretationCallableInputSchema.parse(data);
+        // Additional validation for 'complete' save type
+        if (validatedData.saveType === 'complete') {
+            if (!validatedData.manualInterpretation || validatedData.manualInterpretation.trim().length < 10) {
+                throw new https_1.HttpsError("invalid-argument", "Interpretation must be at least 10 characters long when completing a reading.");
+            }
+        }
         const batch = adminDb.batch();
         const currentTime = admin.firestore.FieldValue.serverTimestamp();
         const readingDocRef = adminDb.collection('readings').doc(validatedData.originalReadingId);
@@ -297,7 +301,7 @@ exports.saveTassologistInterpretationCallable = (0, https_1.onCall)(async (reque
         }));
         batch.update(readingDocRef, {
             manualSymbolsDetected: symbolsToStore,
-            manualInterpretation: validatedData.manualInterpretation,
+            manualInterpretation: validatedData.manualInterpretation || "", // Store empty string if null/undefined
             updatedAt: currentTime,
         });
         const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
@@ -356,6 +360,10 @@ exports.saveTassologistInterpretationCallable = (0, https_1.onCall)(async (reque
         if (error instanceof zod_1.z.ZodError) {
             throw new https_1.HttpsError("invalid-argument", `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`);
         }
+        // If it's already an HttpsError (like the one we throw for interpretation length), rethrow it
+        if (error instanceof https_1.HttpsError) {
+            throw error;
+        }
         const message = error instanceof Error ? error.message : "Failed to save Tassologist interpretation.";
         throw new https_1.HttpsError("internal", message);
     }
@@ -374,7 +382,7 @@ exports.markPersonalizedReadingAsReadCallable = (0, https_1.onCall)(async (reque
         const validatedData = MarkPersonalizedReadingAsReadCallableInputSchema.parse(data);
         const requestDocRef = adminDb.collection('personalizedReadings').doc(validatedData.requestId);
         const requestDocSnap = await requestDocRef.get();
-        if (!requestDocSnap.exists) {
+        if (!requestDocSnap.exists()) {
             throw new https_1.HttpsError("not-found", "Personalized reading request not found.");
         }
         const requestData = requestDocSnap.data();
@@ -416,174 +424,143 @@ const processAudioCallableOptions = {
     cors: true,
 };
 exports.processAndTranscribeAudioCallable = (0, https_1.onCall)(processAudioCallableOptions, async (callableRequest) => {
-    console.log('[processAndTranscribeAudioCallable] INVOKED (Simplified for Debugging).');
+    if (!speechClient || !storage) {
+        console.error('[processAndTranscribeAudioCallable] CRITICAL: SpeechClient or Storage client not initialized. Function cannot proceed.');
+        throw new https_1.HttpsError("internal", "Core services not initialized. Check server logs.");
+    }
     if (!callableRequest.auth) {
         console.error("[processAndTranscribeAudioCallable] Authentication failed: No auth context.");
         throw new https_1.HttpsError("unauthenticated", "The function must be called by an authenticated Tassologist.");
     }
     const tassologistId = callableRequest.auth.uid;
     const data = callableRequest.data;
-    console.log(`[processAndTranscribeAudioCallable] Received data for request ID: ${data?.personalizedReadingRequestId}, Tassologist: ${tassologistId}, MIME Type: ${data?.mimeType}`);
-    // ---- SIMPLIFIED LOGIC FOR DEBUGGING ----
+    console.log(`[processAndTranscribeAudioCallable] Received data for request ID: ${data.personalizedReadingRequestId}, Tassologist: ${tassologistId}, MIME Type: ${data.mimeType}`);
     try {
-        // Simulate some work
-        await new Promise(resolve => setTimeout(resolve, 50)); // Short delay
-        console.log('[processAndTranscribeAudioCallable] Simplified logic returning dummy success.');
-        return { success: true, operationName: "dummy-operation-" + Date.now(), message: "Audio processed (dummy) and transcription started (dummy)." };
+        const validatedData = ProcessAndTranscribeAudioCallableInputSchema.parse(data);
+        console.log('[processAndTranscribeAudioCallable] Data validated successfully.');
+        const { audioBase64, personalizedReadingRequestId, mimeType } = validatedData;
+        const GCLOUD_STORAGE_BUCKET_ENV = process.env.GCLOUD_STORAGE_BUCKET;
+        let bucketName = GCLOUD_STORAGE_BUCKET_ENV;
+        if (!bucketName) {
+            try {
+                const defaultBucket = admin.storage().bucket();
+                bucketName = defaultBucket.name;
+                console.log(`[processAndTranscribeAudioCallable] Using default bucket from Admin SDK: ${bucketName}`);
+            }
+            catch (adminSDKError) {
+                console.error("[processAndTranscribeAudioCallable] Error getting default bucket from Admin SDK:", adminSDKError);
+                // Fallback to project ID based naming if Admin SDK fails
+                const GCP_PROJECT_ENV = process.env.GCP_PROJECT;
+                const GOOGLE_CLOUD_PROJECT_ENV = process.env.GOOGLE_CLOUD_PROJECT;
+                bucketName = `${GCP_PROJECT_ENV || GOOGLE_CLOUD_PROJECT_ENV}.appspot.com`;
+                console.log(`[processAndTranscribeAudioCallable] Falling back to constructed bucket name: ${bucketName}`);
+            }
+        }
+        else {
+            console.log(`[processAndTranscribeAudioCallable] Using bucket from GCLOUD_STORAGE_BUCKET env var: ${bucketName}`);
+        }
+        if (!bucketName || bucketName.includes("undefined") || bucketName === ".appspot.com" || bucketName.trim() === "") {
+            console.error("[processAndTranscribeAudioCallable] GCS bucket name could not be determined or is invalid. Ensure GCLOUD_STORAGE_BUCKET or GCP_PROJECT/GOOGLE_CLOUD_PROJECT env var is set, or Firebase Admin SDK is correctly initialized. Current bucketName:", bucketName);
+            throw new https_1.HttpsError("internal", "Storage bucket configuration error. Bucket name missing or invalid.");
+        }
+        console.log(`[processAndTranscribeAudioCallable] Final bucket for use: ${bucketName}`);
+        const audioBuffer = Buffer.from(audioBase64, 'base64');
+        const audioFileExtension = mimeType.split('/')[1] || 'webm';
+        const audioFileName = `dictation-${Date.now()}.${audioFileExtension}`;
+        const gcsFilePath = `tassologist-dictations-callable/${personalizedReadingRequestId}/${audioFileName}`;
+        console.log(`[processAndTranscribeAudioCallable] Uploading audio to gs://${bucketName}/${gcsFilePath}`);
+        const file = storage.bucket(bucketName).file(gcsFilePath);
+        await file.save(audioBuffer, {
+            metadata: { contentType: mimeType },
+        });
+        const gcsUri = `gs://${bucketName}/${gcsFilePath}`;
+        console.log(`[processAndTranscribeAudioCallable] Audio uploaded successfully to: ${gcsUri}`);
+        const audio = { uri: gcsUri };
+        const configRec = {
+            languageCode: 'en-US',
+            enableAutomaticPunctuation: true,
+            model: 'latest_long', // Corrected model
+            audioChannelCount: 1,
+            enableWordTimeOffsets: false,
+        };
+        const requestPayload = {
+            audio: audio,
+            config: configRec,
+        };
+        console.log(`[processAndTranscribeAudioCallable] Submitting longRunningRecognize request for GCS URI: ${gcsUri} with payload:`, JSON.stringify(requestPayload));
+        const [operation] = await speechClient.longRunningRecognize(requestPayload);
+        console.log(`[processAndTranscribeAudioCallable] Transcription operation started successfully: ${operation.name} for GCS URI: ${gcsUri}`);
+        const requestDocRef = adminDb.collection('personalizedReadings').doc(personalizedReadingRequestId);
+        console.log(`[processAndTranscribeAudioCallable] Updating Firestore document: ${personalizedReadingRequestId} with operation ID ${operation.name}`);
+        await requestDocRef.update({
+            dictatedAudioGcsUri: gcsUri,
+            transcriptionOperationId: operation.name,
+            transcriptionStatus: 'pending',
+            transcriptionError: null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        console.log(`[processAndTranscribeAudioCallable] Firestore update successful for ${personalizedReadingRequestId}`);
+        console.log('[processAndTranscribeAudioCallable] Function completed successfully, returning to client.');
+        return { success: true, operationName: operation.name, message: "Audio processed and transcription started." };
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error in simplified logic";
-        const errorStack = error instanceof Error ? error.stack : undefined;
-        let errorDetails;
-        if (typeof error === 'object' && error !== null && 'details' in error) {
-            errorDetails = error.details;
+        const tassologistIdForError = callableRequest?.auth?.uid || 'UNKNOWN_TASSOLOGIST';
+        let requestIdForError = 'UNKNOWN_REQUEST_ID';
+        if (typeof callableRequest?.data === 'object' && callableRequest.data !== null && 'personalizedReadingRequestId' in callableRequest.data) {
+            requestIdForError = callableRequest.data.personalizedReadingRequestId;
         }
-        console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR (Simplified Debugging Catch) for Tassologist ${tassologistId}, request ${data?.personalizedReadingRequestId || 'UNKNOWN_REQUEST_ID'}:`, errorMessage, errorStack, errorDetails);
-        console.error(`[processAndTranscribeAudioCallable] RAW ERROR OBJECT (Simplified Debugging Catch):`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
-        throw new https_1.HttpsError("internal", "Simplified function encountered an error: " + errorMessage);
+        console.error(`[processAndTranscribeAudioCallable] RAW ERROR OBJECT:`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        if (error instanceof Error) {
+            console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR for Tassologist ${tassologistIdForError}, request ${requestIdForError}:`, error.message, error.stack, error.details);
+        }
+        else {
+            console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR for Tassologist ${tassologistIdForError}, request ${requestIdForError}: Non-Error object thrown:`, error);
+        }
+        let errorMessage = "Failed to process audio and start transcription. Please check server logs for details.";
+        if (error instanceof zod_1.z.ZodError) {
+            errorMessage = `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`;
+            console.error("[processAndTranscribeAudioCallable] ZodError:", errorMessage);
+            throw new https_1.HttpsError("invalid-argument", errorMessage);
+        }
+        // Using type assertion for gcpError
+        const gcpError = error;
+        if (gcpError.code === 'storage/object-not-found') {
+            errorMessage = "GCS object not found after upload attempt, or bucket issue.";
+        }
+        else if (gcpError.message && (gcpError.message.includes("SpeechClient") || gcpError.message.includes("speech.googleapis.com"))) {
+            errorMessage = `Speech API error: ${gcpError.message}`;
+        }
+        else if (gcpError.code && typeof gcpError.code === 'number') {
+            errorMessage = `gRPC Error Code ${gcpError.code}: ${gcpError.message || gcpError.details || 'Unknown gRPC error'}`;
+        }
+        else if (gcpError.message) {
+            errorMessage = gcpError.message;
+        }
+        console.error(`[processAndTranscribeAudioCallable] Determined error message for HttpsError: ${errorMessage}`);
+        if (requestIdForError !== 'UNKNOWN_REQUEST_ID') {
+            try {
+                console.log(`[processAndTranscribeAudioCallable] Attempting to update Firestore for request ${requestIdForError} with failed status due to error: ${errorMessage.substring(0, 500)}`);
+                const requestDocRef = adminDb.collection('personalizedReadings').doc(requestIdForError);
+                await requestDocRef.update({
+                    transcriptionStatus: 'failed',
+                    transcriptionError: errorMessage.substring(0, 500),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+                console.log(`[processAndTranscribeAudioCallable] Firestore updated with failed status for request ${requestIdForError}.`);
+            }
+            catch (firestoreError) {
+                const fsErrorMessage = firestoreError instanceof Error ? firestoreError.message : String(firestoreError);
+                const fsErrorStack = firestoreError instanceof Error ? firestoreError.stack : undefined;
+                console.error(`[processAndTranscribeAudioCallable] ADDITIONALLY FAILED to update Firestore with error status for request ${requestIdForError}:`, fsErrorMessage, fsErrorStack);
+            }
+        }
+        else {
+            console.warn(`[processAndTranscribeAudioCallable] personalizedReadingRequestId not available in error handler. Cannot update Firestore status.`);
+        }
+        console.log(`[processAndTranscribeAudioCallable] Throwing HttpsError to client with message: ${errorMessage}`);
+        if (error instanceof https_1.HttpsError)
+            throw error; // Re-throw if it's already an HttpsError
+        throw new https_1.HttpsError("internal", errorMessage);
     }
-    // ---- ORIGINAL LOGIC COMMENTED OUT FOR DEBUGGING ----
-    /*
-    if (!speechClient || !storage) {
-      console.error('[processAndTranscribeAudioCallable] CRITICAL: SpeechClient or Storage client not initialized. Function cannot proceed.');
-      throw new HttpsError("internal", "Core services not initialized. Check server logs.");
-    }
-  
-    if (!callableRequest.auth) {
-      console.error("[processAndTranscribeAudioCallable] Authentication failed: No auth context.");
-      throw new HttpsError("unauthenticated", "The function must be called by an authenticated Tassologist.");
-    }
-    // const tassologistId = callableRequest.auth.uid;
-    // const data = callableRequest.data as ProcessAndTranscribeAudioCallableInput;
-    // console.log(`[processAndTranscribeAudioCallable] Received data for request ID: ${data.personalizedReadingRequestId}, Tassologist: ${tassologistId}, MIME Type: ${data.mimeType}`);
-  
-    try {
-      const validatedData = ProcessAndTranscribeAudioCallableInputSchema.parse(data);
-      console.log('[processAndTranscribeAudioCallable] Data validated successfully.');
-  
-      const { audioBase64, personalizedReadingRequestId, mimeType } = validatedData;
-  
-      const GCLOUD_STORAGE_BUCKET_ENV = process.env.GCLOUD_STORAGE_BUCKET;
-      const GCP_PROJECT_ENV = process.env.GCP_PROJECT;
-      const GOOGLE_CLOUD_PROJECT_ENV = process.env.GOOGLE_CLOUD_PROJECT;
-  
-      console.log(`[processAndTranscribeAudioCallable] ENV Vars: GCLOUD_STORAGE_BUCKET=${GCLOUD_STORAGE_BUCKET_ENV}, GCP_PROJECT=${GCP_PROJECT_ENV}, GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT_ENV}`);
-  
-      const bucketName = GCLOUD_STORAGE_BUCKET_ENV || `${GCP_PROJECT_ENV || GOOGLE_CLOUD_PROJECT_ENV}.appspot.com`;
-  
-      if (!bucketName || bucketName.includes("undefined") || bucketName === ".appspot.com") {
-          console.error("[processAndTranscribeAudioCallable] GCS bucket name could not be determined or is invalid. Ensure GCLOUD_STORAGE_BUCKET or GCP_PROJECT/GOOGLE_CLOUD_PROJECT env var is set. Current bucketName:", bucketName);
-          throw new HttpsError("internal", "Storage bucket configuration error. Bucket name missing or invalid.");
-      }
-      console.log(`[processAndTranscribeAudioCallable] Using bucket: ${bucketName}`);
-  
-      const audioBuffer = Buffer.from(audioBase64, 'base64');
-      const audioFileExtension = mimeType.split('/')[1] || 'webm';
-      const audioFileName = `dictation-${Date.now()}.${audioFileExtension}`;
-      const gcsFilePath = `tassologist-dictations-callable/${personalizedReadingRequestId}/${audioFileName}`;
-  
-      console.log(`[processAndTranscribeAudioCallable] Uploading audio to gs://${bucketName}/${gcsFilePath}`);
-  
-      const file = storage.bucket(bucketName).file(gcsFilePath);
-      await file.save(audioBuffer, {
-        metadata: { contentType: mimeType },
-      });
-  
-      const gcsUri = `gs://${bucketName}/${gcsFilePath}`;
-      console.log(`[processAndTranscribeAudioCallable] Audio uploaded successfully to: ${gcsUri}`);
-  
-      const audio = { uri: gcsUri };
-      const configRec = {
-        languageCode: 'en-US',
-        enableAutomaticPunctuation: true,
-        model: 'long',
-        audioChannelCount: 1,
-        enableWordTimeOffsets: false,
-      };
-      const requestPayload = {
-        audio: audio,
-        config: configRec,
-      };
-  
-      console.log(`[processAndTranscribeAudioCallable] Submitting longRunningRecognize request for GCS URI: ${gcsUri} with payload:`, JSON.stringify(requestPayload));
-      const [operation] = await speechClient.longRunningRecognize(requestPayload);
-      console.log(`[processAndTranscribeAudioCallable] Transcription operation started successfully: ${operation.name} for GCS URI: ${gcsUri}`);
-  
-      const requestDocRef = adminDb.collection('personalizedReadings').doc(personalizedReadingRequestId);
-      console.log(`[processAndTranscribeAudioCallable] Updating Firestore document: ${personalizedReadingRequestId} with operation ID ${operation.name}`);
-      await requestDocRef.update({
-        dictatedAudioGcsUri: gcsUri,
-        transcriptionOperationId: operation.name,
-        transcriptionStatus: 'pending',
-        transcriptionError: null,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      console.log(`[processAndTranscribeAudioCallable] Firestore update successful for ${personalizedReadingRequestId}`);
-  
-      console.log('[processAndTranscribeAudioCallable] Function completed successfully, returning to client.');
-      return { success: true, operationName: operation.name, message: "Audio processed and transcription started." };
-  
-    } catch (error: unknown) {
-      const tassologistIdForError = callableRequest?.auth?.uid || 'UNKNOWN_TASSOLOGIST';
-      let requestIdForError = 'UNKNOWN_REQUEST_ID';
-      if (typeof callableRequest?.data === 'object' && callableRequest.data !== null && 'personalizedReadingRequestId' in callableRequest.data) {
-          requestIdForError = (callableRequest.data as ProcessAndTranscribeAudioCallableInput).personalizedReadingRequestId;
-      }
-      
-  
-      console.error(`[processAndTranscribeAudioCallable] RAW ERROR OBJECT:`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
-      if (error instanceof Error) {
-          console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR for Tassologist ${tassologistIdForError}, request ${requestIdForError}:`, error.message, error.stack, (error as {details?: unknown}).details);
-      } else {
-          console.error(`[processAndTranscribeAudioCallable] CRITICAL ERROR for Tassologist ${tassologistIdForError}, request ${requestIdForError}: Non-Error object thrown:`, error);
-      }
-  
-  
-      let errorMessage = "Failed to process audio and start transcription. Please check server logs for details.";
-  
-      if (error instanceof z.ZodError) {
-        errorMessage = `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`;
-        console.error("[processAndTranscribeAudioCallable] ZodError:", errorMessage);
-        throw new HttpsError("invalid-argument", errorMessage);
-      }
-      
-      // Using type assertion for gcpError
-      const gcpError = error as {code?: string | number; message?: string; details?: string};
-  
-      if (gcpError.code === 'storage/object-not-found') {
-        errorMessage = "GCS object not found after upload attempt, or bucket issue.";
-      } else if (gcpError.message && (gcpError.message.includes("SpeechClient") || gcpError.message.includes("speech.googleapis.com"))) {
-        errorMessage = `Speech API error: ${gcpError.message}`;
-      } else if (gcpError.code && typeof gcpError.code === 'number') {
-          errorMessage = `gRPC Error Code ${gcpError.code}: ${gcpError.message || gcpError.details || 'Unknown gRPC error'}`;
-      } else if (gcpError.message) {
-        errorMessage = gcpError.message;
-      }
-  
-      console.error(`[processAndTranscribeAudioCallable] Determined error message for HttpsError: ${errorMessage}`);
-  
-      if (requestIdForError !== 'UNKNOWN_REQUEST_ID') {
-          try {
-              console.log(`[processAndTranscribeAudioCallable] Attempting to update Firestore for request ${requestIdForError} with failed status due to error: ${errorMessage.substring(0, 500)}`);
-              const requestDocRef = adminDb.collection('personalizedReadings').doc(requestIdForError);
-              await requestDocRef.update({
-                  transcriptionStatus: 'failed',
-                  transcriptionError: errorMessage.substring(0, 500),
-                  updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-              });
-              console.log(`[processAndTranscribeAudioCallable] Firestore updated with failed status for request ${requestIdForError}.`);
-          } catch (firestoreError: unknown) {
-              const fsErrorMessage = firestoreError instanceof Error ? firestoreError.message : String(firestoreError);
-              const fsErrorStack = firestoreError instanceof Error ? firestoreError.stack : undefined;
-              console.error(`[processAndTranscribeAudioCallable] ADDITIONALLY FAILED to update Firestore with error status for request ${requestIdForError}:`, fsErrorMessage, fsErrorStack);
-          }
-      } else {
-          console.warn(`[processAndTranscribeAudioCallable] personalizedReadingRequestId not available in error handler. Cannot update Firestore status.`);
-      }
-  
-      console.log(`[processAndTranscribeAudioCallable] Throwing HttpsError to client with message: ${errorMessage}`);
-      throw new HttpsError("internal", errorMessage);
-    }
-    */
 });
 //# sourceMappingURL=index.js.map
