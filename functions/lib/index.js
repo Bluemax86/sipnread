@@ -266,9 +266,8 @@ exports.submitRoxyReadingRequestCallable = (0, https_1.onCall)(async (request) =
 // ---- Save Tassologist Interpretation Callable ----
 const ManualSymbolCallableSchema = zod_1.z.object({
     symbol: zod_1.z.string(),
-    position: zod_1.z.preprocess(// Ensure empty strings or null are treated as undefined for optional validation
-    (val) => (val === "" || val === null ? undefined : val), zod_1.z.number().int().min(0, "Position must be a non-negative integer.").max(12, "Position must be between 0 and 12.")
-        .optional()).nullable(), // Allow null to pass through from client if undefined was sent
+    position: zod_1.z.preprocess((val) => (val === "" || val === null ? undefined : val), zod_1.z.number().int().min(0, "Position must be a non-negative integer.").max(12, "Position must be between 0 and 12.")
+        .optional()).nullable(),
 });
 const StoredManualSymbolSchema = zod_1.z.object({
     symbolName: zod_1.z.string(),
