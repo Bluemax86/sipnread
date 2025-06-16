@@ -80,7 +80,8 @@ const UpdateUserProfileCallableInputSchema = zod_1.z.object({
     name: zod_1.z.string().min(1, "Name is required.").max(100, "Name cannot exceed 100 characters."),
     profilePicUrl: zod_1.z.string().url("Please enter a valid URL for the profile picture.").or(zod_1.z.literal("")).optional().nullable(),
     bio: zod_1.z.string().max(500, "Bio can be up to 500 characters.").optional().nullable(),
-    birthdate: zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Birthdate must be in YYYY-MM-DD format.").optional().nullable(),
+    birthdate: zod_1.z.preprocess((val) => (val === "" ? null : val), // If empty string, treat as null
+    zod_1.z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Birthdate must be in YYYY-MM-DD format.").optional().nullable()),
 });
 exports.updateUserProfileCallable = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
@@ -104,7 +105,7 @@ exports.updateUserProfileCallable = (0, https_1.onCall)(async (request) => {
         if (validatedData.profilePicUrl !== undefined) {
             updatePayload.profilePicUrl = validatedData.profilePicUrl === null ? null : (validatedData.profilePicUrl || null);
         }
-        if (validatedData.birthdate) {
+        if (validatedData.birthdate) { // This will be true only for a valid date string
             const dateParts = validatedData.birthdate.split("-");
             const year = parseInt(dateParts[0], 10);
             const month = parseInt(dateParts[1], 10) - 1; // JS months are 0-indexed
@@ -113,8 +114,8 @@ exports.updateUserProfileCallable = (0, https_1.onCall)(async (request) => {
                 updatePayload.birthdate = admin.firestore.Timestamp.fromDate(new Date(year, month, day));
             }
         }
-        else if (validatedData.birthdate === null || validatedData.birthdate === "") {
-            updatePayload.birthdate = null; // Explicitly set to null if client sends empty or null
+        else if (validatedData.birthdate === null) { // An empty string from client becomes null after preprocess
+            updatePayload.birthdate = null;
         }
         await profileRef.update(updatePayload);
         return { success: true, message: "Profile updated successfully." };
