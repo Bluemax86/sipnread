@@ -204,6 +204,21 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
   try {
     const validatedData = SubmitRoxyReadingRequestCallableInputSchema.parse(data);
 
+    // Fetch user's profile to get their name for the email subject
+    let userNameForSubject = validatedData.userEmail; // Fallback to email
+    try {
+      const userProfileSnap = await adminDb.collection('profiles').doc(userId).get();
+      if (userProfileSnap.exists()) {
+        const userProfileData = userProfileSnap.data();
+        if (userProfileData && userProfileData.name && typeof userProfileData.name === 'string' && userProfileData.name.trim() !== '') {
+          userNameForSubject = userProfileData.name;
+        }
+      }
+    } catch (profileError) {
+      console.warn(`[submitRoxyReadingRequestCallable] Could not fetch profile for user ${userId} to get name for email subject:`, profileError);
+      // userNameForSubject already defaults to email
+    }
+
     let assignedTassologistId: string | undefined = undefined;
     let tassologistEmailForNotification: string | undefined = undefined;
 
@@ -237,13 +252,12 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
     const requestRef = await adminDb.collection('personalizedReadings').add(requestDocData);
 
     if (tassologistEmailForNotification) {
-      const subject = `New Personalized Reading Request - ID: ${requestRef.id}`;
+      const subject = `New Personalized Reading Request from ${userNameForSubject}`;
       const htmlBody = `
         <p>Hello Roxy,</p>
-        <p>A new personalized tea leaf reading request has been submitted.</p>
+        <p>A new personalized tea leaf reading request has been submitted by ${userNameForSubject} (${validatedData.userEmail}).</p>
         <ul>
           <li><strong>Request ID:</strong> ${requestRef.id}</li>
-          <li><strong>User Email:</strong> ${validatedData.userEmail}</li>
           ${validatedData.originalReadingId ? `<li><strong>Original AI Reading ID:</strong> ${validatedData.originalReadingId}</li>` : ''}
         </ul>
         <p>Please log in to the Tassologist Dashboard to view and process this request.</p>
@@ -638,6 +652,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     throw new HttpsError("internal", errorMessage);
   }
 });
+
 
 
 

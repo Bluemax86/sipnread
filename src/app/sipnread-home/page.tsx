@@ -172,7 +172,7 @@ export default function SipnreadHomePage() {
             <CardTitle className="font-headline text-2xl flex items-center">
               How It Works
             </CardTitle>
-            <CardDescription>Follow these simple steps to get your tea leaf reading:</CardDescription>
+            <CardDescription>Follow these simple steps for your tea leaf reading:</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-card-foreground">
             <div className="flex items-start">
@@ -181,11 +181,11 @@ export default function SipnreadHomePage() {
             </div>
             <div className="flex items-start">
               <Droplets className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-              <p><span className="font-semibold">Enjoy &amp; Prepare:</span> Drink your tea, leaving a very small amount of liquid and the leaves at the bottom.</p>
+              <p><span className="font-semibold">Enjoy &amp; Prepare:</span> Drink your tea, leaving a very small amount of liquid and leaves at the bottom.</p>
             </div>
             <div className="flex items-start">
               <Repeat className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-              <p><span className="font-semibold">The Ritual:</span> Gently swirl the cup three times, anticlockwise. Ensure no one else touches your cup.</p>
+              <p><span className="font-semibold">The Ritual:</span> Gently swirl the cup three times anticlockwise. Ensure no one else touches your cup.</p>
             </div>
             <div className="flex items-start">
               <Filter className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
@@ -194,7 +194,7 @@ export default function SipnreadHomePage() {
             <div className="flex items-start">
               <Camera className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
               <div>
-                <p><span className="font-semibold">Capture the Moment (4 Photos):</span> Turn the cup upright. Starting with the cup handle in the 3 o&apos;clock position take four clear photos from above the cup. Make sure the entire cup including the handle are clearly visible, rotating the cup for each shot, with the handle at these positions:</p>
+                <p><span className="font-semibold">Capture the Moment (4 Photos):</span> Turn the cup upright. Starting with the cup handle in the 3 o&apos;clock position, take four clear photos from above the cup. Make sure the entire cup including the handle are clearly visible, rotating the cup for each shot, with the handle at these positions:</p>
                 <ul className="list-none pl-0 mt-2 space-y-1 text-xs sm:text-sm">
                   
                   <li className="flex items-center"><Clock3 className="h-4 w-4 text-primary mr-2 shrink-0" /> Handle at 3 o&apos;clock (handle right side)</li>
