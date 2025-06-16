@@ -55,12 +55,12 @@ export default function GatewayPage() {
     <div className="container mx-auto min-h-[calc(100vh-120px)] flex flex-col items-center justify-center py-8 px-4">
       <header className="text-center mb-10 md:mb-12">
         <Image
-          src="/7_Logo.svg"
-          alt="Sip-n-Read Logo"
+          src="/swirl-logo.png"
+          alt="Sip-n-Read Swirl Logo"
           width={80}
           height={80}
           className="mx-auto mb-4"
-          data-ai-hint="logo 7"
+          data-ai-hint="logo swirl"
         />
         <h1 className="text-4xl md:text-5xl font-headline text-primary mb-2 tracking-tight">
           Choose Your Path
