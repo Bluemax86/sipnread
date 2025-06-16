@@ -68,7 +68,7 @@ export default function GatewayPage() {
       </header>
 
       <main className="w-full max-w-xl">
-        <div className="grid grid-cols-2 gap-6 md:gap-8 justify-items-center">
+        <div className="grid grid-cols-2 gap-6 justify-items-center">
           {divinationTiles.map((tile) => (
             <Card
               key={tile.imageAlt}
@@ -82,7 +82,8 @@ export default function GatewayPage() {
                 <Image
                   src={tile.imageSrc}
                   alt={tile.imageAlt}
-                  layout="fill"
+                  fill
+                  sizes="(max-width: 639px) 50vw, 276px" // Provides guidance for image optimization based on expected sizes
                   objectFit="cover"
                   data-ai-hint={tile.aiHint}
                   className={cn(tile.active && 'group-hover:opacity-90 transition-opacity')}
