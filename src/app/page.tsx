@@ -67,14 +67,14 @@ export default function GatewayPage() {
         </h1>
       </header>
 
-      <main className="w-full max-w-xl"> {/* Reverted to max-w-xl */}
+      <main className="w-full max-w-xl">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8 justify-items-center">
           {divinationTiles.map((tile) => (
             <Card
               key={tile.imageAlt}
               onClick={() => handleTileClick(tile)}
               className={cn(
-                'relative overflow-hidden shadow-lg transition-all duration-300 ease-in-out transform hover:shadow-xl aspect-square w-full', // Restored aspect-square and w-full
+                'relative overflow-hidden shadow-lg transition-all duration-300 ease-in-out transform hover:shadow-xl aspect-[2/3] w-full',
                 tile.active ? 'cursor-pointer hover:scale-105 group' : 'opacity-60 cursor-not-allowed bg-muted/30'
               )}
             >
@@ -103,4 +103,3 @@ export default function GatewayPage() {
     </div>
   );
 }
-    
