@@ -6,18 +6,16 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore';
-import type { RoxyPersonalizedReadingRequest as BaseRoxyPersonalizedReadingRequest } from '../../actions';
-// Removed import for sendTestEmailToRoxyAction
-// import { useToast } from '@/hooks/use-toast'; // Import useToast was unused
+import type { RoxyPersonalizedReadingRequest as BaseRoxyPersonalizedReadingRequest, ReadingType } from '../../actions';
 
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, AlertCircle, Inbox, Eye, UserX, CalendarDays } from 'lucide-react'; // Removed MailCheck
+import { Loader2, AlertCircle, Inbox, Eye, UserX, CalendarDays, Leaf, Coffee, Layers, Languages } from 'lucide-react';
 import { format } from 'date-fns';
-// import { cn } from '@/lib/utils'; // cn was unused
+import { cn } from '@/lib/utils';
 
 // Interface for requests with ID
 interface RoxyPersonalizedReadingRequestWithId extends BaseRoxyPersonalizedReadingRequest {
@@ -27,10 +25,8 @@ interface RoxyPersonalizedReadingRequestWithId extends BaseRoxyPersonalizedReadi
 export default function TassologistDashboardPage() {
   const { user, loading: authLoading, userProfile, loadingProfile } = useAuth();
   const router = useRouter();
-  // const { toast } = useToast(); // toast was unused
   const [actionableRequests, setActionableRequests] = useState<RoxyPersonalizedReadingRequestWithId[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
-  // Removed isSendingTestEmail state
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,7 +37,6 @@ export default function TassologistDashboardPage() {
     if (!user || !userProfile || userProfile.role !== 'tassologist') {
       setError("Access denied. You must be a Tassologist to view this page.");
       setIsLoadingData(false);
-      // router.replace('/'); // Layout should handle this
       return;
     }
 
@@ -52,8 +47,8 @@ export default function TassologistDashboardPage() {
       try {
         const requestsQuery = query(
           collection(db, 'personalizedReadings'),
-          where('status', 'in', ['new', 'in-progress']), // Fetch 'new' OR 'in-progress' requests
-          orderBy('requestDate', 'asc') // Show oldest requests first
+          where('status', 'in', ['new', 'in-progress']), 
+          orderBy('requestDate', 'asc') 
         );
         const requestsSnapshot = await getDocs(requestsQuery);
         const fetchedRequests = requestsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RoxyPersonalizedReadingRequestWithId));
@@ -70,7 +65,6 @@ export default function TassologistDashboardPage() {
     fetchData();
   }, [user, authLoading, userProfile, loadingProfile, router]);
 
-  // Removed handleSendTestEmail function
 
   if (authLoading || loadingProfile || isLoadingData) {
     return (
@@ -95,7 +89,7 @@ export default function TassologistDashboardPage() {
     );
   }
 
-  if (!user || !userProfile || userProfile.role !== 'tassologist') { // Fallback check
+  if (!user || !userProfile || userProfile.role !== 'tassologist') { 
      return (
       <div className="container mx-auto min-h-[calc(100vh-56px)] flex flex-col items-center justify-center py-8">
         <Alert variant="destructive" className="max-w-md">
@@ -109,29 +103,50 @@ export default function TassologistDashboardPage() {
     );
   }
 
-  const RequestCard = ({ request }: { request: RoxyPersonalizedReadingRequestWithId }) => {
-    const router = useRouter(); // For navigation
-    // Access 'user' and 'userProfile' from the TassologistDashboardPage scope
+  const ReadingTypeIcon = ({ type }: { type: ReadingType | null | undefined }) => {
+    if (!type) return null;
+    switch (type) {
+      case 'tea': return <Leaf className="mr-1.5 h-3.5 w-3.5" />;
+      case 'coffee': return <Coffee className="mr-1.5 h-3.5 w-3.5" />;
+      case 'tarot': return <Layers className="mr-1.5 h-3.5 w-3.5" />;
+      case 'runes': return <Languages className="mr-1.5 h-3.5 w-3.5" />;
+      default: return null;
+    }
+  };
 
-    let badgeVariant: "default" | "secondary" | "outline" = "secondary"; // Default to secondary
+  const RequestCard = ({ request }: { request: RoxyPersonalizedReadingRequestWithId }) => {
+    const router = useRouter(); 
+
+    let badgeVariant: "default" | "secondary" | "outline" = "secondary"; 
+    let statusIcon = <AlertCircle className="mr-2 h-4 w-4" />; // Default icon
+    let statusTextDisplay: string = request.status;
+
     if (request.status === 'new') {
-        badgeVariant = 'default';
+        badgeVariant = 'default'; // Example: Primary color for 'new'
+        statusIcon = <AlertCircle className="mr-2 h-4 w-4 text-primary-foreground" />;
     } else if (request.status === 'in-progress') {
-        badgeVariant = 'secondary';
+        badgeVariant = 'secondary'; // Example: Secondary color for 'in-progress'
+        statusIcon = <Loader2 className="mr-2 h-4 w-4 animate-spin" />;
     }
 
     return (
         <Card key={request.id} className="shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
-            <div className="flex flex-col items-start"> {/* Changed to flex-col and items-start */}
-            <Badge
-                variant={badgeVariant}
-                className="capitalize mb-1" // Added mb-1 for spacing
-            >
-                {request.status}
-            </Badge>
-            <CardTitle className="text-xl">Request from {request.userEmail || 'N/A'}</CardTitle>
+            <div className="flex justify-between items-start mb-1">
+                <Badge
+                    variant={badgeVariant}
+                    className="capitalize"
+                >
+                    {statusIcon} {statusTextDisplay}
+                </Badge>
+                {request.readingType && (
+                    <Badge variant="outline" className="capitalize text-xs flex items-center">
+                        <ReadingTypeIcon type={request.readingType} />
+                        {request.readingType.charAt(0).toUpperCase() + request.readingType.slice(1)}
+                    </Badge>
+                )}
             </div>
+            <CardTitle className="text-xl pt-1">Request from {request.userEmail || 'N/A'}</CardTitle>
             <CardDescription className="flex items-center text-sm pt-1">
             <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
             Requested: {request.requestDate ? format((request.requestDate as Timestamp).toDate(), 'PPP p') : 'N/A'}
@@ -149,7 +164,6 @@ export default function TassologistDashboardPage() {
         <CardFooter>
             <Button
             onClick={async () => {
-              // Console logs removed as per request
               router.push(`/tassologist/request/${request.id}`);
             }}
             className="w-full"            
@@ -170,7 +184,6 @@ export default function TassologistDashboardPage() {
         <p className="text-lg text-muted-foreground">Manage new and in-progress personalized reading requests.</p>
       </header>
       
-      {/* Removed the test email button and its container div */}
 
       <section className="mb-12">
         <h2 className="text-2xl md:text-3xl font-headline text-primary mb-6">Open Requests ({actionableRequests.length})</h2>

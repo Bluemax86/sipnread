@@ -6,13 +6,13 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore';
-import type { RoxyPersonalizedReadingRequest as BaseRoxyPersonalizedReadingRequest } from '../../actions';
+import type { RoxyPersonalizedReadingRequest as BaseRoxyPersonalizedReadingRequest, ReadingType } from '../../actions';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, AlertCircle, Inbox, Eye, CalendarDays, CheckSquare, UserX, History } from 'lucide-react';
+import { Loader2, AlertCircle, Inbox, Eye, CalendarDays, CheckSquare, UserX, History, Leaf, Coffee, Layers, Languages } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -20,11 +20,22 @@ interface RoxyPersonalizedReadingRequestWithId extends BaseRoxyPersonalizedReadi
   id: string;
 }
 
+const ReadingTypeIcon = ({ type }: { type: ReadingType | null | undefined }) => {
+  if (!type) return null;
+  switch (type) {
+    case 'tea': return <Leaf className="mr-1.5 h-3.5 w-3.5" />;
+    case 'coffee': return <Coffee className="mr-1.5 h-3.5 w-3.5" />;
+    case 'tarot': return <Layers className="mr-1.5 h-3.5 w-3.5" />;
+    case 'runes': return <Languages className="mr-1.5 h-3.5 w-3.5" />;
+    default: return null;
+  }
+};
+
 const RequestCard = ({ request }: { request: RoxyPersonalizedReadingRequestWithId }) => {
   const router = useRouter();
   let badgeVariant: "default" | "secondary" | "outline" | "destructive" = "default";
   let badgeIcon = null;
-  let statusTextDisplay: string; // Explicitly type as string for display
+  let statusTextDisplay: string; 
   let badgeClasses = "capitalize";
 
   switch (request.status) {
@@ -42,23 +53,29 @@ const RequestCard = ({ request }: { request: RoxyPersonalizedReadingRequestWithI
           break;
       default: 
           badgeVariant = 'secondary';
-          statusTextDisplay = request.status; // Fallback to actual status if not 'completed' or 'read'
+          statusTextDisplay = request.status; 
           break;
   }
 
   return (
       <Card key={request.id} className="shadow-md hover:shadow-lg transition-shadow">
       <CardHeader>
-          <div className="flex flex-col items-start">
+          <div className="flex justify-between items-start mb-1">
             <Badge
                 variant={badgeVariant}
-                className={cn(badgeClasses, "mb-1")}
+                className={cn(badgeClasses)} 
             >
                 {badgeIcon}
                 {statusTextDisplay}
             </Badge>
-            <CardTitle className="text-xl">{request.userEmail || 'N/A'}</CardTitle>
+            {request.readingType && (
+                <Badge variant="outline" className="capitalize text-xs flex items-center">
+                    <ReadingTypeIcon type={request.readingType} />
+                    {request.readingType.charAt(0).toUpperCase() + request.readingType.slice(1)}
+                </Badge>
+            )}
           </div>
+          <CardTitle className="text-xl pt-1">{request.userEmail || 'N/A'}</CardTitle>
           <CardDescription className="flex items-center text-sm pt-1">
           <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
           Requested: {request.requestDate ? format((request.requestDate as Timestamp).toDate(), 'PPP p') : 'N/A'}
@@ -102,7 +119,6 @@ export default function TassologistPastReadingsPage() {
     if (!user || !userProfile || userProfile.role !== 'tassologist') {
       setError("Access denied. You must be a Tassologist to view this page.");
       setIsLoadingData(false);
-      // The TassologistLayout should handle the primary redirection if not a tassologist.
       return;
     }
 
@@ -156,7 +172,6 @@ export default function TassologistPastReadingsPage() {
     );
   }
   
-  // This check is more of a fallback; TassologistLayout should prevent non-tassologists from reaching here.
   if (!user || !userProfile || userProfile.role !== 'tassologist') {
      return (
       <div className="container mx-auto min-h-[calc(100vh-56px)] flex flex-col items-center justify-center py-8">
@@ -201,3 +216,4 @@ export default function TassologistPastReadingsPage() {
     </div>
   );
 }
+
