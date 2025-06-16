@@ -157,8 +157,8 @@ export default function MyReadingsPage() {
       ? `/my-readings/${request.originalReadingId}?roxyRequestId=${request.id}` 
       : '#'; 
 
-    let statusIcon = <Hourglass className="mr-2 h-4 w-4 text-primary" />; // Default for pending
-    let statusTextDisplay: string = request.status; // Use a different variable name for display string
+    let statusIcon = <Hourglass className="mr-2 h-4 w-4 text-primary" />; 
+    let statusTextDisplay: string = request.status; 
     let actionButtonText = "View Your Personalized Reading";
     let isActionable = false;
 
@@ -167,7 +167,7 @@ export default function MyReadingsPage() {
         statusTextDisplay = "Ready to View";
         isActionable = true;
     } else if (request.status === 'read') { 
-        statusIcon = <CheckCircle className="mr-2 h-4 w-4 text-secondary" />; // Use secondary for 'read'
+        statusIcon = <CheckCircle className="mr-2 h-4 w-4 text-secondary" />; 
         statusTextDisplay = "Viewed";
         actionButtonText = "View Again";
         isActionable = true;
@@ -178,13 +178,21 @@ export default function MyReadingsPage() {
     return (
       <Card key={request.id} className="shadow-md hover:shadow-lg transition-shadow">
         <CardHeader>
-          <CardTitle className="text-xl flex items-center justify-between">
-            <span>Roxy&apos;s Personalized Reading</span>
+          <div className="flex justify-between items-center mb-2">
             <Badge variant={(request.status === 'new') ? 'secondary' : (request.status === 'in-progress' ? 'secondary' : 'outline')} className="capitalize">
                 {statusIcon} {statusTextDisplay}
             </Badge>
+            {request.readingType && (
+              <Badge variant="outline" className="capitalize text-xs flex items-center">
+                <ReadingTypeIcon type={request.readingType} />
+                {request.readingType.charAt(0).toUpperCase() + request.readingType.slice(1)}
+              </Badge>
+            )}
+          </div>
+          <CardTitle className="text-xl">
+            Roxy&apos;s Personalized Reading
           </CardTitle>
-           <CardDescription className="flex items-center text-sm">
+           <CardDescription className="flex items-center text-sm pt-1">
             <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground" />
             Requested on: {request.requestDate ? format((request.requestDate as Timestamp).toDate(), 'PPP') : 'N/A'}
           </CardDescription>
@@ -277,7 +285,7 @@ export default function MyReadingsPage() {
               associatedRoxyRequest = actionablePersonalizedReadings.find( 
                 pr => pr.originalReadingId === reading.id
               );
-              if (associatedRoxyRequest) { // It's a personalized reading with a completed/read request
+              if (associatedRoxyRequest) { 
                 displayCard = true;
                 badgeText = "Personalized"; 
                 linkHref = `/my-readings/${reading.id}?roxyRequestId=${associatedRoxyRequest.id}`;
@@ -309,7 +317,7 @@ export default function MyReadingsPage() {
                     />
                   </div>
                   <CardHeader className="pb-3">
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center justify-between gap-2 mb-2">
                       <Badge variant={badgeText === "Personalized" ? "default" : "secondary"} className="shrink-0">
                         {badgeText}
                       </Badge>
@@ -320,12 +328,9 @@ export default function MyReadingsPage() {
                         </Badge>
                       )}
                     </div>
-                    <div className="flex justify-between items-start mb-1"> {/* This div hosted the CardTitle and (old) Badge */}
-                      <CardTitle className="text-xl leading-tight group-hover:text-accent transition-colors">
+                    <CardTitle className="text-xl leading-tight group-hover:text-accent transition-colors">
                         Reading from {displayDate}
-                      </CardTitle>
-                      {/* Old badge location removed */}
-                    </div>
+                    </CardTitle>
                     {reading.userQuestion && (
                        <CardDescription className="flex items-start text-sm pt-1">
                          <HelpCircle className="mr-2 h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
