@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import { app as firebaseApp } from '@/lib/firebase';
-import type { SaveReadingDataCallableInput } from '@/../functions/src';
+import type { SaveReadingDataCallableInput, ReadingType } from '@/../functions/src';
 
 
 export default function GetReadingPage() {
@@ -22,14 +22,15 @@ export default function GetReadingPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const transitionContainerRef = useRef<HTMLDivElement>(null);
-  const [selectedReadingTypeForDisplay, setSelectedReadingTypeForDisplay] = useState<string | null>(null); // Renamed for clarity
+  // selectedReadingTypeForDisplay is for UI only, not for critical data path.
+  const [selectedReadingTypeForDisplay, setSelectedReadingTypeForDisplay] = useState<string | null>(null);
 
   const overallLoading = isLoadingAI || isSavingReading;
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const type = localStorage.getItem('selectedReadingType');
-      setSelectedReadingTypeForDisplay(type); // Set for display purposes if needed
+      setSelectedReadingTypeForDisplay(type);
     }
   }, []);
 
@@ -50,7 +51,6 @@ export default function GetReadingPage() {
     setResult(null);
     localStorage.removeItem('teaLeafReadingResult');
 
-    // Directly fetch readingType from localStorage for the action
     const currentReadingTypeFromStorage = typeof window !== 'undefined' ? localStorage.getItem('selectedReadingType') : null;
 
     try {
@@ -60,7 +60,7 @@ export default function GetReadingPage() {
         imageStorageUrls,
         question,
         userSymbolNames,
-        currentReadingTypeFromStorage ?? undefined // Pass freshly fetched readingType
+        currentReadingTypeFromStorage ?? undefined
       );
 
       if (aiAnalysisResponse.error || !aiAnalysisResponse.aiInterpretation) {
@@ -68,20 +68,39 @@ export default function GetReadingPage() {
         setIsLoadingAI(false);
         return;
       }
-      setIsLoadingAI(false); 
+      setIsLoadingAI(false);
 
       // Step 2: Save the reading data (including AI results) via Callable Function
       setIsSavingReading(true);
       const functions = getFunctions(firebaseApp);
       const saveReadingData = httpsCallable<SaveReadingDataCallableInput, { success: boolean; readingId?: string; message?: string }>(functions, 'saveReadingDataCallable');
       
+      // Re-fetch readingType from localStorage directly before creating payload for saving
+      const readingTypeForSave = typeof window !== 'undefined' ? localStorage.getItem('selectedReadingType') : null;
+      let finalReadingTypeForPayload: ReadingType | null | undefined;
+
+      const validReadingTypes: ReadingType[] = ['tea', 'coffee', 'tarot', 'runes'];
+
+      if (readingTypeForSave && validReadingTypes.includes(readingTypeForSave as ReadingType)) {
+          finalReadingTypeForPayload = readingTypeForSave as ReadingType;
+      } else if (readingTypeForSave === null) {
+          finalReadingTypeForPayload = null;
+      } else {
+          // If localStorage value is something unexpected (e.g., an old invalid value, or undefined string)
+          // default to undefined, so the Zod schema on the backend handles it as optional.
+          finalReadingTypeForPayload = undefined;
+          if (readingTypeForSave !== null && readingTypeForSave !== undefined) {
+            console.warn(`[GetReadingPage] Unexpected readingType ('${readingTypeForSave}') from localStorage during save. Defaulting to undefined.`);
+          }
+      }
+
       const saveDataPayload: SaveReadingDataCallableInput = {
         imageStorageUrls: aiAnalysisResponse.imageStorageUrls || imageStorageUrls,
         aiSymbolsDetected: aiAnalysisResponse.aiSymbolsDetected || [],
         aiInterpretation: aiAnalysisResponse.aiInterpretation,
         userQuestion: aiAnalysisResponse.userQuestion || null,
         userSymbolNames: aiAnalysisResponse.userSymbolNames || null,
-        readingType: (aiAnalysisResponse.readingType as 'tea' | 'coffee' | 'tarot' | 'runes' | null | undefined) ?? undefined,
+        readingType: finalReadingTypeForPayload,
       };
 
       const saveResult: HttpsCallableResult<{ success: boolean; readingId?: string; message?: string }> = await saveReadingData(saveDataPayload);
@@ -89,15 +108,18 @@ export default function GetReadingPage() {
       if (saveResult.data.success && saveResult.data.readingId) {
         const finalResult: FullInterpretationResult = {
           ...aiAnalysisResponse,
+          // Ensure readingType in the final result shown to user also reflects what was attempted to be saved
+          readingType: finalReadingTypeForPayload !== undefined ? finalReadingTypeForPayload : (aiAnalysisResponse.readingType || null),
           readingId: saveResult.data.readingId,
           error: undefined,
         };
         setResult(finalResult);
         localStorage.setItem('teaLeafReadingResult', JSON.stringify(finalResult));
       } else {
-        setResult({ 
+        setResult({
             ...aiAnalysisResponse,
-            error: saveResult.data.message || 'Failed to save reading data.' 
+            readingType: finalReadingTypeForPayload !== undefined ? finalReadingTypeForPayload : (aiAnalysisResponse.readingType || null),
+            error: saveResult.data.message || 'Failed to save reading data.'
         });
       }
     } catch (error: unknown) {
@@ -210,3 +232,5 @@ export default function GetReadingPage() {
     </div>
   );
 }
+
+    
