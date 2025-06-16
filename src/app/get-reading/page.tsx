@@ -22,14 +22,14 @@ export default function GetReadingPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const transitionContainerRef = useRef<HTMLDivElement>(null);
-  const [selectedReadingType, setSelectedReadingType] = useState<string | null>(null);
+  const [selectedReadingTypeForDisplay, setSelectedReadingTypeForDisplay] = useState<string | null>(null); // Renamed for clarity
 
   const overallLoading = isLoadingAI || isSavingReading;
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const type = localStorage.getItem('selectedReadingType');
-      setSelectedReadingType(type);
+      setSelectedReadingTypeForDisplay(type); // Set for display purposes if needed
     }
   }, []);
 
@@ -50,6 +50,9 @@ export default function GetReadingPage() {
     setResult(null);
     localStorage.removeItem('teaLeafReadingResult');
 
+    // Directly fetch readingType from localStorage for the action
+    const currentReadingTypeFromStorage = typeof window !== 'undefined' ? localStorage.getItem('selectedReadingType') : null;
+
     try {
       // Step 1: Get AI Analysis
       const aiAnalysisResponse = await getTeaLeafAiAnalysisAction(
@@ -57,7 +60,7 @@ export default function GetReadingPage() {
         imageStorageUrls,
         question,
         userSymbolNames,
-        selectedReadingType ?? undefined // Pass readingType from state for AI analysis
+        currentReadingTypeFromStorage ?? undefined // Pass freshly fetched readingType
       );
 
       if (aiAnalysisResponse.error || !aiAnalysisResponse.aiInterpretation) {
@@ -78,15 +81,14 @@ export default function GetReadingPage() {
         aiInterpretation: aiAnalysisResponse.aiInterpretation,
         userQuestion: aiAnalysisResponse.userQuestion || null,
         userSymbolNames: aiAnalysisResponse.userSymbolNames || null,
-        // Use readingType from aiAnalysisResponse to ensure consistency
-        readingType: (aiAnalysisResponse.readingType as 'tea' | 'coffee' | 'tarot' | 'runes' | undefined) ?? undefined,
+        readingType: (aiAnalysisResponse.readingType as 'tea' | 'coffee' | 'tarot' | 'runes' | null | undefined) ?? undefined,
       };
 
       const saveResult: HttpsCallableResult<{ success: boolean; readingId?: string; message?: string }> = await saveReadingData(saveDataPayload);
 
       if (saveResult.data.success && saveResult.data.readingId) {
         const finalResult: FullInterpretationResult = {
-          ...aiAnalysisResponse, // This already includes readingType from getTeaLeafAiAnalysisAction
+          ...aiAnalysisResponse,
           readingId: saveResult.data.readingId,
           error: undefined,
         };

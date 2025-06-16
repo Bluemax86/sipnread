@@ -136,7 +136,7 @@ const SaveReadingDataCallableInputSchema = z.object({
   aiInterpretation: z.string(),
   userQuestion: z.string().optional().nullable(),
   userSymbolNames: z.array(z.string()).optional().nullable(),
-  readingType: ReadingTypeEnum.optional().nullable(), // Added readingType
+  readingType: ReadingTypeEnum.optional().nullable(),
 });
 export type SaveReadingDataCallableInput = z.infer<typeof SaveReadingDataCallableInputSchema>;
 
@@ -151,7 +151,7 @@ export const saveReadingDataCallable = onCall(async (request) => {
   try {
     const validatedData = SaveReadingDataCallableInputSchema.parse(data);
 
-    const readingDocData: Record<string, unknown> = { // Use Record<string, unknown> for flexibility
+    const readingDocData: Record<string, unknown> = { 
       userId,
       readingDate: admin.firestore.FieldValue.serverTimestamp(),
       photoStorageUrls: validatedData.imageStorageUrls,
@@ -164,7 +164,11 @@ export const saveReadingDataCallable = onCall(async (request) => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    if (validatedData.readingType) {
+    // Correctly handle readingType:
+    // If validatedData.readingType is one of the enum strings, or null, add it.
+    // If validatedData.readingType is undefined (because it was optional and not provided),
+    // then readingDocData.readingType will not be set, and Firestore will omit the field.
+    if (validatedData.readingType !== undefined) {
       readingDocData.readingType = validatedData.readingType;
     }
 
@@ -246,13 +250,14 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
         if (originalReadingDoc.exists) {
           const originalReadingData = originalReadingDoc.data();
           if (originalReadingData && originalReadingData.readingType) {
-             // Validate if readingType is one of the allowed enum values before assigning
             const parsedReadingType = ReadingTypeEnum.safeParse(originalReadingData.readingType);
             if (parsedReadingType.success) {
               readingTypeFromOriginal = parsedReadingType.data;
             } else {
-              console.warn(`[submitRoxyReadingRequestCallable] Invalid readingType ('${originalReadingData.readingType}') found on original reading ${validatedData.originalReadingId}.`);
+              console.warn(`[submitRoxyReadingRequestCallable] Invalid readingType ('${originalReadingData.readingType}') found on original reading ${validatedData.originalReadingId}. Defaulting to null for personalized request.`);
             }
+          } else {
+             console.warn(`[submitRoxyReadingRequestCallable] readingType field missing or undefined on original reading ${validatedData.originalReadingId}. Defaulting to null for personalized request.`);
           }
         }
       } catch (fetchError) {
@@ -271,7 +276,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
       userSatisfaction: null,
       tassologistId: assignedTassologistId || null,
       originalReadingId: validatedData.originalReadingId || null,
-      readingType: readingTypeFromOriginal, // Add readingType here
+      readingType: readingTypeFromOriginal,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       dictatedAudioGcsUri: null,
       transcriptionOperationId: null,
@@ -683,3 +688,4 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     throw new HttpsError("internal", errorMessage);
   }
 });
+
