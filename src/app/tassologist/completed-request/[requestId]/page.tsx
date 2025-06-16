@@ -336,6 +336,7 @@ export default function ViewCompletedRequestPage() {
                                 objectFit="cover"
                                 className="transition-transform duration-300 pointer-events-none"
                                 data-ai-hint="tea cup leaves"
+                                unoptimized={true}
                             />
                             </div>
                         </DialogTrigger>
@@ -352,6 +353,7 @@ export default function ViewCompletedRequestPage() {
                                 style={{ width: 'auto', height: 'auto', maxHeight: '85vh', maxWidth: '100%' }}
                                 objectFit="contain"
                                 data-ai-hint="tea cup leaves"
+                                unoptimized={true}
                             />
                             </div>
                         </DialogContent>

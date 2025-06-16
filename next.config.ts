@@ -14,14 +14,11 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'placehold.co',
-        port: '',
-        pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'firebasestorage.googleapis.com',
-        port: '',
-        pathname: '/v0/b/sipnread.firebasestorage.app/o/**', // More specific pathname
+        // Simplified: removed port and specific pathname
       },
     ],
   },

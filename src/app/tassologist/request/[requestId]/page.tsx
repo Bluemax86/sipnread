@@ -72,7 +72,7 @@ export default function ProcessRequestPage() {
       const requestDocRef = doc(db, 'personalizedReadings', requestId);
       const requestDocSnap = await getDoc(requestDocRef);
 
-      if (!requestDocSnap.exists()) {
+      if (!requestDocSnap.exists) {
         setPageError("Personalized reading request not found.");
         setIsLoadingData(false);
         return;
@@ -412,6 +412,7 @@ export default function ProcessRequestPage() {
                             objectFit="cover"
                             className="transition-transform duration-300 pointer-events-none"
                             data-ai-hint="tea cup leaves"
+                            unoptimized={true}
                           />
                         </div>
                       </DialogTrigger>
@@ -428,6 +429,7 @@ export default function ProcessRequestPage() {
                             style={{ width: 'auto', height: 'auto', maxHeight: '85vh', maxWidth: '100%' }}
                             objectFit="contain"
                             data-ai-hint="tea cup leaves"
+                            unoptimized={true}
                           />
                         </div>
                       </DialogContent>
@@ -452,14 +454,12 @@ export default function ProcessRequestPage() {
                 onSubmit={handleFormSubmit}
                 isSubmittingForm={isSubmittingForm}
                 initialData={formInitialData}
-                onTranscriptFetched={(transcript, fetchedOperationName) => { // operationName added
-                    setFormInitialData(prev => ({ ...prev, manualInterpretation: transcript }));
-                    // If the operation name matches the current request's operation ID, update status
-                    if (fetchedOperationName && request?.transcriptionOperationId === fetchedOperationName) {
-                        setCurrentTranscriptionStatus('completed');
-                    }
-                    // Optionally, trigger a full re-fetch if needed:
-                    // fetchFullRequestData(); 
+                onNewOperationId={(operationName) => {
+                   // This callback could be used to update the request document with new operation ID
+                   // or trigger a re-fetch if needed, but might not be directly necessary
+                   // if the parent (this page) already knows the operation ID from the initial request load.
+                   // For now, it can be used to update the currentTranscriptionStatus locally if desired.
+                   setCurrentTranscriptionStatus('pending'); 
                 }}
                 currentTranscriptionStatus={currentTranscriptionStatus}
              />
@@ -472,4 +472,3 @@ export default function ProcessRequestPage() {
     </div>
   );
 }
-
