@@ -4,7 +4,7 @@
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button'; // Added this import
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ArrowRight } from 'lucide-react';
 
@@ -21,7 +21,7 @@ interface TileInfo {
 const divinationTiles: TileInfo[] = [
   {
     title: 'Tea Leaf Reading',
-    imageSrc: '/images/tile1-tea.png',
+    imageSrc: '/images/tile_1_tea.svg', // Updated path
     imageAlt: 'A cup with tea leaves patterned at the bottom',
     aiHint: 'tea leaves',
     active: true,
@@ -30,7 +30,7 @@ const divinationTiles: TileInfo[] = [
   },
   {
     title: 'Coffee Ground Reading',
-    imageSrc: '/images/tile2-coffee.png',
+    imageSrc: '/images/tile_2_coffee.svg', // Updated path
     imageAlt: 'Dark coffee grounds forming patterns in a white cup',
     aiHint: 'coffee grounds',
     active: false,
@@ -38,7 +38,7 @@ const divinationTiles: TileInfo[] = [
   },
   {
     title: 'Tarot Card Reading',
-    imageSrc: '/images/tile3-tarot.png',
+    imageSrc: '/images/tile_3_tarot.svg', // Updated path
     imageAlt: 'A spread of ornate Tarot cards on a mystical background',
     aiHint: 'tarot cards',
     active: false,
@@ -46,7 +46,7 @@ const divinationTiles: TileInfo[] = [
   },
   {
     title: 'Rune Casting',
-    imageSrc: '/images/tile4-runes.png',
+    imageSrc: '/images/tile_4_runes.svg', // Updated path
     imageAlt: 'A set of ancient carved runes scattered on a wooden surface',
     aiHint: 'rune stones',
     active: false,
