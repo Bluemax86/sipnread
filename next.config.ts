@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'firebasestorage.googleapis.com',
-        // Simplified: removed port and specific pathname
+        // Removed port and specific pathname to be broader, relying on unoptimized={true}
       },
     ],
   },
@@ -37,3 +37,5 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+    
