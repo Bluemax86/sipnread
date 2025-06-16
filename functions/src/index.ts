@@ -54,7 +54,10 @@ const UpdateUserProfileCallableInputSchema = z.object({
   name: z.string().min(1, "Name is required.").max(100, "Name cannot exceed 100 characters."),
   profilePicUrl: z.string().url("Please enter a valid URL for the profile picture.").or(z.literal("")).optional().nullable(),
   bio: z.string().max(500, "Bio can be up to 500 characters.").optional().nullable(),
-  birthdate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Birthdate must be in YYYY-MM-DD format.").optional().nullable(),
+  birthdate: z.preprocess(
+    (val) => (val === "" ? null : val), // If empty string, treat as null
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Birthdate must be in YYYY-MM-DD format.").optional().nullable()
+  ),
 });
 type UpdateUserProfileCallableInput = z.infer<typeof UpdateUserProfileCallableInputSchema>;
 
@@ -85,7 +88,7 @@ export const updateUserProfileCallable = onCall(async (request) => {
        updatePayload.profilePicUrl = validatedData.profilePicUrl === null ? null : (validatedData.profilePicUrl || null);
     }
 
-    if (validatedData.birthdate) {
+    if (validatedData.birthdate) { // This will be true only for a valid date string
       const dateParts = validatedData.birthdate.split("-");
       const year = parseInt(dateParts[0], 10);
       const month = parseInt(dateParts[1], 10) - 1; // JS months are 0-indexed
@@ -93,8 +96,8 @@ export const updateUserProfileCallable = onCall(async (request) => {
       if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
         updatePayload.birthdate = admin.firestore.Timestamp.fromDate(new Date(year, month, day));
       }
-    } else if (validatedData.birthdate === null || validatedData.birthdate === "") {
-      updatePayload.birthdate = null; // Explicitly set to null if client sends empty or null
+    } else if (validatedData.birthdate === null) { // An empty string from client becomes null after preprocess
+      updatePayload.birthdate = null; 
     }
 
     await profileRef.update(updatePayload);
@@ -296,16 +299,17 @@ type PersonalizedReadingStatus = 'new' | 'in-progress' | 'completed' | 'cancelle
 type TranscriptionStatus = 'not_requested' | 'pending' | 'completed' | 'failed' | null;
 
 // This interface defines the specific fields allowed in the request update payload.
-// It also includes an index signature to satisfy Firestore's UpdateData type,
-// allowing for FieldValue types and other potential future fields without breaking strict typing.
-interface RequestUpdatePayload {
+interface RequestUpdatePayloadBase {
   updatedAt: admin.firestore.FieldValue;
   transcriptionError: string | null;
   completionDate?: admin.firestore.FieldValue;
   status?: PersonalizedReadingStatus;
   transcriptionStatus?: TranscriptionStatus;
-  [key: string]: admin.firestore.FieldValue | string | null | PersonalizedReadingStatus | TranscriptionStatus | boolean | number | Date | undefined;
 }
+// This type combines the base with an index signature for flexibility with Firestore updates.
+type RequestUpdatePayload = RequestUpdatePayloadBase & {
+  [key: string]: admin.firestore.FieldValue | string | null | PersonalizedReadingStatus | TranscriptionStatus | boolean | number | Date | undefined;
+};
 
 
 export const saveTassologistInterpretationCallable = onCall(async (request) => {
@@ -634,6 +638,7 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     throw new HttpsError("internal", errorMessage);
   }
 });
+
 
 
 
