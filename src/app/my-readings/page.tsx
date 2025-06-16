@@ -8,13 +8,13 @@ import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore';
-import type { TeaReadingDocument as BaseTeaReadingDocument, RoxyPersonalizedReadingRequest as BaseRoxyPersonalizedReadingRequest } from '../actions';
+import type { TeaReadingDocument as BaseTeaReadingDocument, RoxyPersonalizedReadingRequest as BaseRoxyPersonalizedReadingRequest, ReadingType } from '../actions';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, AlertCircle, Inbox, Wand2, CalendarDays, HelpCircle, ChevronRight, UserX, CheckCircle, Hourglass } from 'lucide-react';
+import { Loader2, AlertCircle, Inbox, Wand2, CalendarDays, HelpCircle, ChevronRight, UserX, CheckCircle, Hourglass, Leaf, Coffee, Layers, Languages } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface TeaReadingDocument extends BaseTeaReadingDocument {
@@ -28,6 +28,17 @@ const getSnippet = (text: string | undefined, maxLength = 100): string => {
   if (!text) return 'No interpretation available.';
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength) + '...';
+};
+
+const ReadingTypeIcon = ({ type }: { type: ReadingType | null | undefined }) => {
+  if (!type) return null;
+  switch (type) {
+    case 'tea': return <Leaf className="mr-1.5 h-3.5 w-3.5" />;
+    case 'coffee': return <Coffee className="mr-1.5 h-3.5 w-3.5" />;
+    case 'tarot': return <Layers className="mr-1.5 h-3.5 w-3.5" />;
+    case 'runes': return <Languages className="mr-1.5 h-3.5 w-3.5" />;
+    default: return null;
+  }
 };
 
 export default function MyReadingsPage() {
@@ -271,10 +282,7 @@ export default function MyReadingsPage() {
                 badgeText = "Personalized"; 
                 linkHref = `/my-readings/${reading.id}?roxyRequestId=${associatedRoxyRequest.id}`;
               }
-              // If hasManualInterpretation but no matching actionableRoxyRequest, it's likely an older format or in-progress by Tassologist
-              // but not yet in 'completed'/'read' state for the user. We don't show it here as "Personalized" yet.
             } else {
-              // It's an AI-only reading, always display
               displayCard = true;
               badgeText = "AI Reading";
             }
@@ -293,21 +301,30 @@ export default function MyReadingsPage() {
                     <Image
                       src={thumbnailUrl}
                       alt="Tea leaf reading thumbnail"
-                      layout="fill"
-                      objectFit="cover"
-                      className="group-hover:scale-105 transition-transform duration-300"
+                      fill
+                      sizes="(max-width: 767px) 50vw, (min-width: 768px) 33vw"
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
                       data-ai-hint="tea cup leaves"
                       unoptimized={true}
                     />
                   </div>
                   <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start mb-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant={badgeText === "Personalized" ? "default" : "secondary"} className="shrink-0">
+                        {badgeText}
+                      </Badge>
+                      {reading.readingType && (
+                        <Badge variant="outline" className="capitalize text-xs flex items-center">
+                          <ReadingTypeIcon type={reading.readingType} />
+                          {reading.readingType.charAt(0).toUpperCase() + reading.readingType.slice(1)}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex justify-between items-start mb-1"> {/* This div hosted the CardTitle and (old) Badge */}
                       <CardTitle className="text-xl leading-tight group-hover:text-accent transition-colors">
                         Reading from {displayDate}
                       </CardTitle>
-                      <Badge variant={badgeText === "Personalized" ? "default" : "secondary"} className="ml-2 shrink-0">
-                        {badgeText}
-                      </Badge>
+                      {/* Old badge location removed */}
                     </div>
                     {reading.userQuestion && (
                        <CardDescription className="flex items-start text-sm pt-1">
@@ -339,7 +356,6 @@ export default function MyReadingsPage() {
     </div>
   );
 }
-
     
 
     
