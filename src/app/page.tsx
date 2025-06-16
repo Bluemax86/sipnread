@@ -3,9 +3,8 @@
 
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Card } from '@/components/ui/card'; 
+import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-
 
 interface TileInfo {
   imageSrc: string;
@@ -68,23 +67,23 @@ export default function GatewayPage() {
         </h1>
       </header>
 
-      <main className="w-full max-w-4xl"> 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8 justify-items-center"> 
+      <main className="w-full max-w-xl"> {/* Reverted to max-w-xl */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8 justify-items-center">
           {divinationTiles.map((tile) => (
             <Card
-              key={tile.imageAlt} 
+              key={tile.imageAlt}
               onClick={() => handleTileClick(tile)}
               className={cn(
-                'overflow-hidden shadow-lg transition-all duration-300 ease-in-out transform hover:shadow-xl w-[400px] h-[600px]', 
-                tile.active ? 'cursor-pointer hover:scale-105 group' : 'opacity-60 cursor-not-allowed bg-muted/30',
+                'relative overflow-hidden shadow-lg transition-all duration-300 ease-in-out transform hover:shadow-xl aspect-square w-full', // Restored aspect-square and w-full
+                tile.active ? 'cursor-pointer hover:scale-105 group' : 'opacity-60 cursor-not-allowed bg-muted/30'
               )}
             >
-              <div className="relative w-full h-full"> 
+              <div className="relative w-full h-full">
                 <Image
                   src={tile.imageSrc}
                   alt={tile.imageAlt}
                   layout="fill"
-                  objectFit="cover" 
+                  objectFit="cover"
                   data-ai-hint={tile.aiHint}
                   className={cn(tile.active && 'group-hover:opacity-90 transition-opacity')}
                 />
@@ -104,6 +103,4 @@ export default function GatewayPage() {
     </div>
   );
 }
-    
-
     
