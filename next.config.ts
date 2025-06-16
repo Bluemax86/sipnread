@@ -15,7 +15,10 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'placehold.co',
       },
-      // Removed the firebasestorage.googleapis.com entry
+      { // This entry is being restored
+        protocol: 'https',
+        hostname: 'firebasestorage.googleapis.com',
+      },
     ],
   },
   // Add the allowedDevOrigins configuration for development
@@ -33,5 +36,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-
     
