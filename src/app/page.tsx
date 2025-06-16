@@ -68,7 +68,7 @@ export default function GatewayPage() {
       </header>
 
       <main className="w-full max-w-xl">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8 justify-items-center">
+        <div className="grid grid-cols-2 gap-6 md:gap-8 justify-items-center">
           {divinationTiles.map((tile) => (
             <Card
               key={tile.imageAlt}
@@ -88,8 +88,8 @@ export default function GatewayPage() {
                   className={cn(tile.active && 'group-hover:opacity-90 transition-opacity')}
                 />
                 {!tile.active && (
-                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                    <span className="text-white font-semibold text-lg px-4 py-2 bg-black/50 rounded">Coming Soon</span>
+                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center p-2">
+                    <span className="text-white font-semibold text-sm sm:text-lg text-center bg-black/50 rounded px-2 py-1">Coming Soon</span>
                   </div>
                 )}
               </div>
