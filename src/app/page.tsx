@@ -185,7 +185,7 @@ export default function LandingPage() {
             </div>
             <div className="flex items-start">
               <Repeat className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-              <p><span className="font-semibold">The Ritual:</span> Gently swirl the cup three times with your non-dominant hand. Ensure no one else touches your cup.</p>
+              <p><span className="font-semibold">The Ritual:</span> Gently swirl the cup three times, anticlockwise. Ensure no one else touches your cup.</p>
             </div>
             <div className="flex items-start">
               <Filter className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
