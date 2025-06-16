@@ -83,10 +83,12 @@ export default function GatewayPage() {
                   src={tile.imageSrc}
                   alt={tile.imageAlt}
                   fill
-                  sizes="(max-width: 639px) 50vw, 276px" // Provides guidance for image optimization based on expected sizes
-                  objectFit="cover"
+                  sizes="(max-width: 639px) 50vw, 276px"
                   data-ai-hint={tile.aiHint}
-                  className={cn(tile.active && 'group-hover:opacity-90 transition-opacity')}
+                  className={cn(
+                    'object-cover', // Added Tailwind class for object-fit
+                    tile.active && 'group-hover:opacity-90 transition-opacity'
+                  )}
                 />
                 {!tile.active && (
                   <div className="absolute inset-0 bg-black/30 flex items-center justify-center p-2">
