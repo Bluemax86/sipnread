@@ -48,7 +48,6 @@ try {
 }
 
 
-
 // Zod schema for input validation for updateUserProfileCallable
 const UpdateUserProfileCallableInputSchema = z.object({
   name: z.string().min(1, "Name is required.").max(100, "Name cannot exceed 100 characters."),
@@ -113,6 +112,10 @@ export const updateUserProfileCallable = onCall(async (request) => {
   }
 });
 
+// ReadingType enum for use in schemas
+const ReadingTypeEnum = z.enum(['tea', 'coffee', 'tarot', 'runes']);
+export type ReadingType = z.infer<typeof ReadingTypeEnum>;
+
 
 // Schema for AI Symbol (matches structure from Genkit flow output)
 // This is used for the `aiSymbolsDetected` field.
@@ -133,6 +136,7 @@ const SaveReadingDataCallableInputSchema = z.object({
   aiInterpretation: z.string(),
   userQuestion: z.string().optional().nullable(),
   userSymbolNames: z.array(z.string()).optional().nullable(),
+  readingType: ReadingTypeEnum.optional().nullable(), // Added readingType
 });
 export type SaveReadingDataCallableInput = z.infer<typeof SaveReadingDataCallableInputSchema>;
 
@@ -147,7 +151,7 @@ export const saveReadingDataCallable = onCall(async (request) => {
   try {
     const validatedData = SaveReadingDataCallableInputSchema.parse(data);
 
-    const readingDocData = {
+    const readingDocData: Record<string, unknown> = { // Use Record<string, unknown> for flexibility
       userId,
       readingDate: admin.firestore.FieldValue.serverTimestamp(),
       photoStorageUrls: validatedData.imageStorageUrls,
@@ -159,6 +163,11 @@ export const saveReadingDataCallable = onCall(async (request) => {
       manualInterpretation: "",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
+
+    if (validatedData.readingType) {
+      readingDocData.readingType = validatedData.readingType;
+    }
+
 
     const readingRef = await adminDb.collection('readings').add(readingDocData);
 
@@ -204,8 +213,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
   try {
     const validatedData = SubmitRoxyReadingRequestCallableInputSchema.parse(data);
 
-    // Fetch user's profile to get their name for the email subject
-    let userNameForSubject = validatedData.userEmail; // Fallback to email
+    let userNameForSubject = validatedData.userEmail; 
     try {
       const userProfileSnap = await adminDb.collection('profiles').doc(userId).get();
       if (userProfileSnap.exists()) {
@@ -216,7 +224,6 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
       }
     } catch (profileError) {
       console.warn(`[submitRoxyReadingRequestCallable] Could not fetch profile for user ${userId} to get name for email subject:`, profileError);
-      // userNameForSubject already defaults to email
     }
 
     let assignedTassologistId: string | undefined = undefined;
@@ -232,6 +239,28 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
       console.warn("[submitRoxyReadingRequestCallable] No tassologist found. Request will be created without assignment.");
     }
 
+    let readingTypeFromOriginal: ReadingType | null = null;
+    if (validatedData.originalReadingId) {
+      try {
+        const originalReadingDoc = await adminDb.collection('readings').doc(validatedData.originalReadingId).get();
+        if (originalReadingDoc.exists()) {
+          const originalReadingData = originalReadingDoc.data();
+          if (originalReadingData && originalReadingData.readingType) {
+             // Validate if readingType is one of the allowed enum values before assigning
+            const parsedReadingType = ReadingTypeEnum.safeParse(originalReadingData.readingType);
+            if (parsedReadingType.success) {
+              readingTypeFromOriginal = parsedReadingType.data;
+            } else {
+              console.warn(`[submitRoxyReadingRequestCallable] Invalid readingType ('${originalReadingData.readingType}') found on original reading ${validatedData.originalReadingId}.`);
+            }
+          }
+        }
+      } catch (fetchError) {
+        console.warn(`[submitRoxyReadingRequestCallable] Could not fetch original reading ${validatedData.originalReadingId} to get readingType:`, fetchError);
+      }
+    }
+
+
     const requestDocData: Record<string, unknown> = {
       userId,
       userEmail: validatedData.userEmail,
@@ -242,6 +271,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
       userSatisfaction: null,
       tassologistId: assignedTassologistId || null,
       originalReadingId: validatedData.originalReadingId || null,
+      readingType: readingTypeFromOriginal, // Add readingType here
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       dictatedAudioGcsUri: null,
       transcriptionOperationId: null,
@@ -259,6 +289,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
         <ul>
           <li><strong>Request ID:</strong> ${requestRef.id}</li>
           ${validatedData.originalReadingId ? `<li><strong>Original AI Reading ID:</strong> ${validatedData.originalReadingId}</li>` : ''}
+          ${readingTypeFromOriginal ? `<li><strong>Reading Type:</strong> ${readingTypeFromOriginal.charAt(0).toUpperCase() + readingTypeFromOriginal.slice(1)}</li>` : ''}
         </ul>
         <p>Please log in to the Tassologist Dashboard to view and process this request.</p>
         <p>Thank you,<br/>Sip-n-Read System</p>
@@ -652,11 +683,3 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     throw new HttpsError("internal", errorMessage);
   }
 });
-
-
-
-
-
-
-
-

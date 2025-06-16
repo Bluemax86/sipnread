@@ -1,4 +1,3 @@
-
 'use client';
 
 import Image from 'next/image';
@@ -12,6 +11,7 @@ interface TileInfo {
   aiHint: string;
   active: boolean;
   targetPath?: string;
+  type: 'tea' | 'coffee' | 'tarot' | 'runes'; // Added type
 }
 
 const divinationTiles: TileInfo[] = [
@@ -21,24 +21,28 @@ const divinationTiles: TileInfo[] = [
     aiHint: 'tea leaves',
     active: true,
     targetPath: '/sipnread-home',
+    type: 'tea',
   },
   {
     imageSrc: '/images/tile_2_coffee.svg',
     imageAlt: 'Dark coffee grounds forming patterns in a white cup',
     aiHint: 'coffee grounds',
     active: false,
+    type: 'coffee',
   },
   {
     imageSrc: '/images/tile_3_tarot.svg',
     imageAlt: 'A spread of ornate Tarot cards on a mystical background',
     aiHint: 'tarot cards',
     active: false,
+    type: 'tarot',
   },
   {
     imageSrc: '/images/tile_4_runes.svg',
     imageAlt: 'A set of ancient carved runes scattered on a wooden surface',
     aiHint: 'rune stones',
     active: false,
+    type: 'runes',
   },
 ];
 
@@ -47,6 +51,9 @@ export default function GatewayPage() {
 
   const handleTileClick = (tile: TileInfo) => {
     if (tile.active && tile.targetPath) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('selectedReadingType', tile.type);
+      }
       router.push(tile.targetPath);
     }
   };
@@ -83,10 +90,10 @@ export default function GatewayPage() {
                   src={tile.imageSrc}
                   alt={tile.imageAlt}
                   fill
-                  sizes="(max-width: 639px) 50vw, 276px"
+                  sizes="(max-width: 767px) 50vw, (max-width: 1023px) 276px, 276px"
                   data-ai-hint={tile.aiHint}
                   className={cn(
-                    'object-cover', // Added Tailwind class for object-fit
+                    'object-cover',
                     tile.active && 'group-hover:opacity-90 transition-opacity'
                   )}
                 />

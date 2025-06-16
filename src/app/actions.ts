@@ -1,4 +1,3 @@
-
 // src/app/actions.ts
 'use server';
 
@@ -7,7 +6,7 @@ import { Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app as firebaseApp, db } from '@/lib/firebase';
 import { SpeechClient } from '@google-cloud/speech';
-import type { protos } from '@google-cloud/speech'; // Import protos for type safety
+import type { protos } from '@google-cloud/speech';
 
 import type {
   SubmitRoxyReadingRequestCallableInput,
@@ -31,6 +30,8 @@ export interface StoredManualSymbol {
   truePositionInCup: string;
 }
 
+export type ReadingType = 'tea' | 'coffee' | 'tarot' | 'runes';
+
 export interface TeaReadingDocument {
   userId: string;
   readingDate: Timestamp;
@@ -41,6 +42,7 @@ export interface TeaReadingDocument {
   userSymbolNames?: string[];
   manualSymbolsDetected: StoredManualSymbol[];
   manualInterpretation: string;
+  readingType?: ReadingType | null; // Added readingType
   updatedAt?: Timestamp;
 }
 
@@ -67,6 +69,7 @@ export interface RoxyPersonalizedReadingRequest {
   userSatisfaction?: 'happy' | 'neutral' | 'unhappy' | null;
   completionDate?: Timestamp;
   tassologistId?: string;
+  readingType?: ReadingType | null; // Added readingType
   updatedAt?: Timestamp;
   dictatedAudioGcsUri?: string | null;
   transcriptionOperationId?: string | null;
@@ -81,6 +84,7 @@ export interface AiAnalysisResult {
   imageStorageUrls?: string[];
   userQuestion?: string | null;
   userSymbolNames?: string[] | null;
+  readingType?: ReadingType | string | null; // Added readingType
 }
 
 export interface FullInterpretationResult extends AiAnalysisResult {
@@ -92,7 +96,8 @@ export async function getTeaLeafAiAnalysisAction(
   userIdClientProvided: string,
   imageStorageUrls: string[],
   userQuestion?: string,
-  userSymbolNames?: string[]
+  userSymbolNames?: string[],
+  readingType?: string // Added readingType parameter
 ): Promise<AiAnalysisResult> {
   if (!userIdClientProvided) {
     return { error: "User context missing for AI analysis." };
@@ -120,6 +125,7 @@ export async function getTeaLeafAiAnalysisAction(
       imageStorageUrls: imageStorageUrls,
       userQuestion: (userQuestion && userQuestion.trim() !== '') ? userQuestion : null,
       userSymbolNames: (userSymbolNames && userSymbolNames.length > 0) ? userSymbolNames.filter(name => name.trim() !== '') : null,
+      readingType: readingType || null, // Include readingType in the result
     };
 
   } catch (e: unknown) {
@@ -394,4 +400,3 @@ export async function updateUserProfile(
 ): Promise<{ success: boolean; error?: string }> {
   return { success: false, error: "This action is deprecated. Use the 'updateUserProfileCallable' Firebase Cloud Function instead."};
 }
-

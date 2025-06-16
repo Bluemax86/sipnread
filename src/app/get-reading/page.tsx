@@ -1,18 +1,17 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ImageUploadForm } from '@/components/sipnread/ImageUploadForm';
-import { getTeaLeafAiAnalysisAction, type FullInterpretationResult } from '../actions'; // AiAnalysisResult removed as it's implicitly part of FullInterpretationResult
+import { getTeaLeafAiAnalysisAction, type FullInterpretationResult } from '../actions';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, Send, CheckCircle, Wand2, UserX, Brain, Database } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
-import { app as firebaseApp } from '@/lib/firebase'; // Import initialized Firebase app
-import type { SaveReadingDataCallableInput } from '@/../functions/src'; // Adjust path if necessary
+import { app as firebaseApp } from '@/lib/firebase';
+import type { SaveReadingDataCallableInput } from '@/../functions/src';
 
 
 export default function GetReadingPage() {
@@ -22,8 +21,16 @@ export default function GetReadingPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const transitionContainerRef = useRef<HTMLDivElement>(null);
+  const [selectedReadingType, setSelectedReadingType] = useState<string | null>(null);
 
   const overallLoading = isLoadingAI || isSavingReading;
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const type = localStorage.getItem('selectedReadingType');
+      setSelectedReadingType(type);
+    }
+  }, []);
 
   useEffect(() => {
     if (overallLoading && transitionContainerRef.current) {
@@ -40,18 +47,24 @@ export default function GetReadingPage() {
     setIsLoadingAI(true);
     setIsSavingReading(false);
     setResult(null);
-    localStorage.removeItem('teaLeafReadingResult'); // Clear previous result
+    localStorage.removeItem('teaLeafReadingResult');
 
     try {
       // Step 1: Get AI Analysis
-      const aiAnalysisResponse = await getTeaLeafAiAnalysisAction(user.uid, imageStorageUrls, question, userSymbolNames);
+      const aiAnalysisResponse = await getTeaLeafAiAnalysisAction(
+        user.uid,
+        imageStorageUrls,
+        question,
+        userSymbolNames,
+        selectedReadingType ?? undefined // Pass readingType
+      );
 
       if (aiAnalysisResponse.error || !aiAnalysisResponse.aiInterpretation) {
         setResult({ error: aiAnalysisResponse.error || "Failed to get AI interpretation." });
         setIsLoadingAI(false);
         return;
       }
-      setIsLoadingAI(false); // AI part is done
+      setIsLoadingAI(false); 
 
       // Step 2: Save the reading data (including AI results) via Callable Function
       setIsSavingReading(true);
@@ -59,26 +72,28 @@ export default function GetReadingPage() {
       const saveReadingData = httpsCallable<SaveReadingDataCallableInput, { success: boolean; readingId?: string; message?: string }>(functions, 'saveReadingDataCallable');
       
       const saveDataPayload: SaveReadingDataCallableInput = {
-        imageStorageUrls: aiAnalysisResponse.imageStorageUrls || imageStorageUrls, // Fallback to original if not passed through
+        imageStorageUrls: aiAnalysisResponse.imageStorageUrls || imageStorageUrls,
         aiSymbolsDetected: aiAnalysisResponse.aiSymbolsDetected || [],
         aiInterpretation: aiAnalysisResponse.aiInterpretation,
         userQuestion: aiAnalysisResponse.userQuestion || null,
         userSymbolNames: aiAnalysisResponse.userSymbolNames || null,
+        readingType: (selectedReadingType as 'tea' | 'coffee' | 'tarot' | 'runes' | undefined) ?? undefined, // Add readingType
       };
 
       const saveResult: HttpsCallableResult<{ success: boolean; readingId?: string; message?: string }> = await saveReadingData(saveDataPayload);
 
       if (saveResult.data.success && saveResult.data.readingId) {
         const finalResult: FullInterpretationResult = {
-          ...aiAnalysisResponse, // Contains AI symbols and interpretation
+          ...aiAnalysisResponse,
           readingId: saveResult.data.readingId,
-          error: undefined, // Clear any previous error from AI stage
+          readingType: selectedReadingType ?? undefined, // Include readingType in the final result for localStorage
+          error: undefined,
         };
         setResult(finalResult);
         localStorage.setItem('teaLeafReadingResult', JSON.stringify(finalResult));
       } else {
         setResult({ 
-            ...aiAnalysisResponse, // Keep AI data if available
+            ...aiAnalysisResponse,
             error: saveResult.data.message || 'Failed to save reading data.' 
         });
       }
