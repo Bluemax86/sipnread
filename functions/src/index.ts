@@ -216,7 +216,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
     let userNameForSubject = validatedData.userEmail; 
     try {
       const userProfileSnap = await adminDb.collection('profiles').doc(userId).get();
-      if (userProfileSnap.exists()) {
+      if (userProfileSnap.exists) {
         const userProfileData = userProfileSnap.data();
         if (userProfileData && userProfileData.name && typeof userProfileData.name === 'string' && userProfileData.name.trim() !== '') {
           userNameForSubject = userProfileData.name;
@@ -243,7 +243,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
     if (validatedData.originalReadingId) {
       try {
         const originalReadingDoc = await adminDb.collection('readings').doc(validatedData.originalReadingId).get();
-        if (originalReadingDoc.exists()) {
+        if (originalReadingDoc.exists) {
           const originalReadingData = originalReadingDoc.data();
           if (originalReadingData && originalReadingData.readingType) {
              // Validate if readingType is one of the allowed enum values before assigning

@@ -129,6 +129,8 @@ exports.updateUserProfileCallable = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError("internal", message);
     }
 });
+// ReadingType enum for use in schemas
+const ReadingTypeEnum = zod_1.z.enum(['tea', 'coffee', 'tarot', 'runes']);
 // Schema for AI Symbol (matches structure from Genkit flow output)
 // This is used for the `aiSymbolsDetected` field.
 const AiSymbolSchemaCallable = zod_1.z.object({
@@ -147,6 +149,7 @@ const SaveReadingDataCallableInputSchema = zod_1.z.object({
     aiInterpretation: zod_1.z.string(),
     userQuestion: zod_1.z.string().optional().nullable(),
     userSymbolNames: zod_1.z.array(zod_1.z.string()).optional().nullable(),
+    readingType: ReadingTypeEnum.optional().nullable(), // Added readingType
 });
 exports.saveReadingDataCallable = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
@@ -168,6 +171,9 @@ exports.saveReadingDataCallable = (0, https_1.onCall)(async (request) => {
             manualInterpretation: "",
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         };
+        if (validatedData.readingType) {
+            readingDocData.readingType = validatedData.readingType;
+        }
         const readingRef = await adminDb.collection('readings').add(readingDocData);
         const profileRef = adminDb.collection('profiles').doc(userId);
         const profileSnap = await profileRef.get();
@@ -205,6 +211,19 @@ exports.submitRoxyReadingRequestCallable = (0, https_1.onCall)(async (request) =
     const data = request.data;
     try {
         const validatedData = SubmitRoxyReadingRequestCallableInputSchema.parse(data);
+        let userNameForSubject = validatedData.userEmail;
+        try {
+            const userProfileSnap = await adminDb.collection('profiles').doc(userId).get();
+            if (userProfileSnap.exists) {
+                const userProfileData = userProfileSnap.data();
+                if (userProfileData && userProfileData.name && typeof userProfileData.name === 'string' && userProfileData.name.trim() !== '') {
+                    userNameForSubject = userProfileData.name;
+                }
+            }
+        }
+        catch (profileError) {
+            console.warn(`[submitRoxyReadingRequestCallable] Could not fetch profile for user ${userId} to get name for email subject:`, profileError);
+        }
         let assignedTassologistId = undefined;
         let tassologistEmailForNotification = undefined;
         const tassologistsQuery = adminDb.collection('profiles').where('role', '==', 'tassologist').limit(1);
@@ -217,6 +236,28 @@ exports.submitRoxyReadingRequestCallable = (0, https_1.onCall)(async (request) =
         else {
             console.warn("[submitRoxyReadingRequestCallable] No tassologist found. Request will be created without assignment.");
         }
+        let readingTypeFromOriginal = null;
+        if (validatedData.originalReadingId) {
+            try {
+                const originalReadingDoc = await adminDb.collection('readings').doc(validatedData.originalReadingId).get();
+                if (originalReadingDoc.exists) {
+                    const originalReadingData = originalReadingDoc.data();
+                    if (originalReadingData && originalReadingData.readingType) {
+                        // Validate if readingType is one of the allowed enum values before assigning
+                        const parsedReadingType = ReadingTypeEnum.safeParse(originalReadingData.readingType);
+                        if (parsedReadingType.success) {
+                            readingTypeFromOriginal = parsedReadingType.data;
+                        }
+                        else {
+                            console.warn(`[submitRoxyReadingRequestCallable] Invalid readingType ('${originalReadingData.readingType}') found on original reading ${validatedData.originalReadingId}.`);
+                        }
+                    }
+                }
+            }
+            catch (fetchError) {
+                console.warn(`[submitRoxyReadingRequestCallable] Could not fetch original reading ${validatedData.originalReadingId} to get readingType:`, fetchError);
+            }
+        }
         const requestDocData = {
             userId,
             userEmail: validatedData.userEmail,
@@ -227,6 +268,7 @@ exports.submitRoxyReadingRequestCallable = (0, https_1.onCall)(async (request) =
             userSatisfaction: null,
             tassologistId: assignedTassologistId || null,
             originalReadingId: validatedData.originalReadingId || null,
+            readingType: readingTypeFromOriginal, // Add readingType here
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             dictatedAudioGcsUri: null,
             transcriptionOperationId: null,
@@ -235,14 +277,14 @@ exports.submitRoxyReadingRequestCallable = (0, https_1.onCall)(async (request) =
         };
         const requestRef = await adminDb.collection('personalizedReadings').add(requestDocData);
         if (tassologistEmailForNotification) {
-            const subject = `New Personalized Reading Request - ID: ${requestRef.id}`;
+            const subject = `New Personalized Reading Request from ${userNameForSubject}`;
             const htmlBody = `
         <p>Hello Roxy,</p>
-        <p>A new personalized tea leaf reading request has been submitted.</p>
+        <p>A new personalized tea leaf reading request has been submitted by ${userNameForSubject} (${validatedData.userEmail}).</p>
         <ul>
           <li><strong>Request ID:</strong> ${requestRef.id}</li>
-          <li><strong>User Email:</strong> ${validatedData.userEmail}</li>
           ${validatedData.originalReadingId ? `<li><strong>Original AI Reading ID:</strong> ${validatedData.originalReadingId}</li>` : ''}
+          ${readingTypeFromOriginal ? `<li><strong>Reading Type:</strong> ${readingTypeFromOriginal.charAt(0).toUpperCase() + readingTypeFromOriginal.slice(1)}</li>` : ''}
         </ul>
         <p>Please log in to the Tassologist Dashboard to view and process this request.</p>
         <p>Thank you,<br/>Sip-n-Read System</p>

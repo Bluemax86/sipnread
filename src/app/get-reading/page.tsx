@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -56,7 +57,7 @@ export default function GetReadingPage() {
         imageStorageUrls,
         question,
         userSymbolNames,
-        selectedReadingType ?? undefined // Pass readingType
+        selectedReadingType ?? undefined // Pass readingType from state for AI analysis
       );
 
       if (aiAnalysisResponse.error || !aiAnalysisResponse.aiInterpretation) {
@@ -77,16 +78,16 @@ export default function GetReadingPage() {
         aiInterpretation: aiAnalysisResponse.aiInterpretation,
         userQuestion: aiAnalysisResponse.userQuestion || null,
         userSymbolNames: aiAnalysisResponse.userSymbolNames || null,
-        readingType: (selectedReadingType as 'tea' | 'coffee' | 'tarot' | 'runes' | undefined) ?? undefined, // Add readingType
+        // Use readingType from aiAnalysisResponse to ensure consistency
+        readingType: (aiAnalysisResponse.readingType as 'tea' | 'coffee' | 'tarot' | 'runes' | undefined) ?? undefined,
       };
 
       const saveResult: HttpsCallableResult<{ success: boolean; readingId?: string; message?: string }> = await saveReadingData(saveDataPayload);
 
       if (saveResult.data.success && saveResult.data.readingId) {
         const finalResult: FullInterpretationResult = {
-          ...aiAnalysisResponse,
+          ...aiAnalysisResponse, // This already includes readingType from getTeaLeafAiAnalysisAction
           readingId: saveResult.data.readingId,
-          readingType: selectedReadingType ?? undefined, // Include readingType in the final result for localStorage
           error: undefined,
         };
         setResult(finalResult);
