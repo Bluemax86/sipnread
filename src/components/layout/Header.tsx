@@ -2,11 +2,10 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image'; // Added import for Image component
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
-import { UserCircle, LogIn, LogOut, UserPlus, Home, List, History, User, LayoutDashboard } from 'lucide-react'; // BookOpenText removed
+import { UserCircle, LogIn, LogOut, UserPlus, Home, List, History, User, LayoutDashboard, BookOpenText } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -45,13 +44,7 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center">
         <Link href={homePath} className="mr-6 flex items-center space-x-2">
-          <Image
-            src="/swirl-logo.png"
-            alt="Sip-n-Read Swirl Logo"
-            width={28}
-            height={28}
-            data-ai-hint="logo swirl"
-          />
+          <BookOpenText className="h-7 w-7 text-primary" />
           <span className="font-bold text-primary">Sip-n-Read</span>
         </Link>
         <nav className="flex items-center space-x-2 sm:space-x-4 lg:space-x-6 flex-1">
