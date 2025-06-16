@@ -15,11 +15,7 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'placehold.co',
       },
-      {
-        protocol: 'https',
-        hostname: 'firebasestorage.googleapis.com',
-        // Removed port and specific pathname to be broader, relying on unoptimized={true}
-      },
+      // Removed the firebasestorage.googleapis.com entry
     ],
   },
   // Add the allowedDevOrigins configuration for development
