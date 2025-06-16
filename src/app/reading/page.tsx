@@ -199,7 +199,7 @@ export default function ReadingPage() {
             <CardContent className="space-y-4">
               <p className="text-card-foreground leading-relaxed">
                 Our renowned in-house tassologist, Roxy O&apos;Reilly, offers bespoke interpretations. 
-                For just $50, Roxy will personally analyze your tea leaves and provide a detailed, 
+                For just $25, Roxy will personally analyze your tea leaves and provide a detailed, 
                 intuitive reading tailored to you.
               </p>
               <Button 
@@ -216,7 +216,7 @@ export default function ReadingPage() {
                 ) : (
                   <>
                     <Send className="mr-2 h-5 w-5" />
-                    Request Roxy&apos;s Reading ($50)
+                    Request Roxy&apos;s Reading ($25)
                   </>
                 )}
               </Button>
