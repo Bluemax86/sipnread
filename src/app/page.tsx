@@ -33,31 +33,33 @@ export default function GatewayPage() {
       setIsLoading(true);
       setError(null);
       try {
+        const validReadingTypes: TileInfo['readingMethodType'][] = ['tea', 'coffee', 'tarot', 'runes'];
         const tilesQuery = query(
           collection(db, 'images'),
-          where('type', '==', 'tiles'),
+          where('type', 'in', validReadingTypes), // Query for specific reading types
           orderBy('position', 'asc')
         );
         const querySnapshot = await getDocs(tilesQuery);
         const fetchedTilesData = querySnapshot.docs.map(doc => {
           const data = doc.data();
-          // Ensure all required fields are present and correctly typed
+          const typeFromData = data.type as TileInfo['readingMethodType'];
+
           return {
             id: doc.id,
-            imageURL: data.imageURL || 'https://placehold.co/300x450.png?text=Image+Not+Found', // Fallback URL
-            imageAlt: data.imageAlt || 'Divination Tile',
-            aiHint: data.aiHint || 'divination',
+            imageURL: data.imageURL || 'https://placehold.co/300x450.png?text=Image+Not+Found',
+            imageAlt: data.imageAlt || `${typeFromData ? typeFromData.charAt(0).toUpperCase() + typeFromData.slice(1) : 'Divination'} Tile`,
+            aiHint: data.aiHint || typeFromData || 'divination',
             active: typeof data.active === 'boolean' ? data.active : false,
-            targetPath: data.targetPath,
-            readingMethodType: ['tea', 'coffee', 'tarot', 'runes'].includes(data.readingMethodType) 
-                               ? data.readingMethodType 
-                               : 'tea', // Default to 'tea' if invalid
+            targetPath: data.targetPath || '/get-reading', // Default targetPath
+            readingMethodType: validReadingTypes.includes(typeFromData)
+                               ? typeFromData
+                               : 'tea', // Default to 'tea' if data.type is somehow invalid
             position: typeof data.position === 'number' ? data.position : 0,
           } as TileInfo;
         });
         
         if (fetchedTilesData.length === 0) {
-          console.warn("No 'tiles' found in the 'images' collection or all fetched items failed validation.");
+          console.warn("No tiles found for types 'tea', 'coffee', 'tarot', 'runes' or all fetched items failed validation.");
         }
         setTiles(fetchedTilesData);
 
@@ -138,7 +140,7 @@ export default function GatewayPage() {
                       'object-cover',
                       tile.active && 'group-hover:opacity-90 transition-opacity'
                     )}
-                    unoptimized={tile.imageURL.startsWith('https://firebasestorage.googleapis.com')} // Keep unoptimized for Firebase Storage URLs
+                    unoptimized={tile.imageURL.startsWith('https://firebasestorage.googleapis.com')}
                   />
                   {!tile.active && (
                     <div className="absolute inset-0 bg-black/30 flex items-center justify-center p-2">
