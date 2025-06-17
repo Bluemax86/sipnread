@@ -56,7 +56,7 @@ export default function GetReadingPage() {
     };
   }, []);
 
-  const fadeOutAudio = (audioElement: HTMLAudioElement, duration: number = 1500): Promise<void> => {
+  const fadeOutAudio = (audioElement: HTMLAudioElement, duration: number = 3000): Promise<void> => {
     return new Promise((resolve) => {
       if (!audioElement || audioElement.paused) {
         resolve();
@@ -129,17 +129,18 @@ export default function GetReadingPage() {
         const functions = getFunctions(firebaseApp);
         const saveReadingData = httpsCallable<SaveReadingDataCallableInput, { success: boolean; readingId?: string; message?: string }>(functions, 'saveReadingDataCallable');
         
+        // Use a fresh read from localStorage for the save payload
         const readingTypeForSave = typeof window !== 'undefined' ? localStorage.getItem('selectedReadingType') : null;
         let finalReadingTypeForPayload: ReadingType | null | undefined;
         const validReadingTypes: ReadingType[] = ['tea', 'coffee', 'tarot', 'runes'];
 
         if (readingTypeForSave && validReadingTypes.includes(readingTypeForSave as ReadingType)) {
             finalReadingTypeForPayload = readingTypeForSave as ReadingType;
-        } else if (readingTypeForSave === null) {
+        } else if (readingTypeForSave === null) { // Explicitly allow null if that's what's stored
             finalReadingTypeForPayload = null;
         } else {
-            finalReadingTypeForPayload = undefined; // Omit if not a valid type or explicitly not set
-            if (readingTypeForSave !== null && readingTypeForSave !== undefined) {
+            finalReadingTypeForPayload = undefined; // Omit if not a valid type or not set
+             if (readingTypeForSave !== null && readingTypeForSave !== undefined) {
               console.warn(`[GetReadingPage] Unexpected readingType ('${readingTypeForSave}') from localStorage during save. Defaulting to undefined for payload.`);
             }
         }
@@ -172,7 +173,7 @@ export default function GetReadingPage() {
       const processingEndTime = Date.now();
       const audioPlayedDuration = processingEndTime - audioPlayStartTime;
       const minAudioDuration = 15000; 
-      const fadeDuration = 1500;
+      const fadeDuration = 3000; // Updated fade duration
       
       let delayNeeded = 0;
       if (processingActuallyFinished) {
@@ -191,7 +192,7 @@ export default function GetReadingPage() {
         if (processingActuallyFinished && aiAnalysisResponse && finalReadingId) {
           const finalResultForState: FullInterpretationResult = {
             ...aiAnalysisResponse,
-            readingType: aiAnalysisResponse.readingType,
+            readingType: aiAnalysisResponse.readingType, // Ensure readingType from AI response is carried over
             readingId: finalReadingId,
             error: undefined,
           };
@@ -200,6 +201,7 @@ export default function GetReadingPage() {
         } else {
           setResult({ 
             ...(aiAnalysisResponse || {}),
+            readingType: aiAnalysisResponse?.readingType, // Carry over readingType even in error cases if available
             error: errorForState || "An unknown error occurred after processing." 
           });
         }
@@ -314,3 +316,4 @@ export default function GetReadingPage() {
     </div>
   );
 }
+
