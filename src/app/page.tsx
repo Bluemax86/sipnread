@@ -66,9 +66,9 @@ export default function GatewayPage() {
           
           const active = typeof data.active === 'boolean' ? data.active : false;
           
-          // Use target_path, default to /welcome if not specified or malformed.
-          const targetPath = (typeof data.target_path === 'string' && data.target_path.startsWith('/'))
-                                ? data.target_path
+          // Use targetPath, default to /welcome if not specified or malformed.
+          const targetPath = (typeof data.targetPath === 'string' && data.targetPath.startsWith('/'))
+                                ? data.targetPath
                                 : '/welcome'; 
 
           const position = typeof data.position === 'number' ? data.position : 0;
