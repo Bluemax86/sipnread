@@ -12,13 +12,13 @@ import { Loader2, AlertCircle, ImageOff } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface TileInfo {
-  id: string; // Firestore document ID (e.g., "tea", "coffee") which also serves as readingMethodType
+  id: string; // Firestore document ID (e.g., "tea", "Coffee") - keeps original casing for keys
   imageURL: string;
   imageAlt: string;
   aiHint: string;
   active: boolean;
   targetPath: string;
-  readingMethodType: 'tea' | 'coffee' | 'tarot' | 'runes';
+  readingMethodType: 'tea' | 'coffee' | 'tarot' | 'runes'; // Always lowercase
   position: number;
 }
 
@@ -43,38 +43,45 @@ export default function GatewayPage() {
         
         const fetchedTilesData = querySnapshot.docs.map(doc => {
           const data = doc.data();
-          const docId = doc.id;
+          const docId = doc.id; // Original casing, e.g., "Coffee" or "coffee"
+          const lowercasedDocId = docId.toLowerCase(); // Canonical form, e.g., "coffee"
 
-          if (!VALID_READING_TYPES.includes(docId as TileInfo['readingMethodType'])) {
-            console.warn(`Skipping tile with invalid id/type: ${docId}. Document ID must be one of: ${VALID_READING_TYPES.join(', ')}.`);
+          if (!VALID_READING_TYPES.includes(lowercasedDocId as TileInfo['readingMethodType'])) {
+            console.warn(`Skipping tile. Original ID: "${docId}", Lowercased: "${lowercasedDocId}". Not in VALID_READING_TYPES: ${VALID_READING_TYPES.join(', ')}.`);
             return null;
           }
-          const readingMethodType = docId as TileInfo['readingMethodType'];
+          const readingMethodType = lowercasedDocId as TileInfo['readingMethodType'];
           
-          const imageAltText = typeof data.imageAlt === 'string' && data.imageAlt.trim() !== ''
+          const altText = typeof data.imageAlt === 'string' && data.imageAlt.trim() !== ''
                                 ? data.imageAlt
                                 : `${readingMethodType.charAt(0).toUpperCase() + readingMethodType.slice(1)} Reading Tile`;
+
+          const hint = typeof data.aiHint === 'string' && data.aiHint.trim() !== '' 
+                        ? data.aiHint 
+                        : readingMethodType;
 
           const path = typeof data.targetPath === 'string' && data.targetPath.startsWith('/')
                         ? data.targetPath
                         : '/get-reading';
 
           return {
-            id: docId,
+            id: docId, // Use original docId for React key
             imageURL: data.tileURL && typeof data.tileURL === 'string' 
                         ? data.tileURL 
                         : 'https://placehold.co/300x450.png?text=Image+Not+Found',
-            imageAlt: imageAltText,
-            aiHint: typeof data.aiHint === 'string' && data.aiHint.trim() !== '' ? data.aiHint : readingMethodType,
+            imageAlt: altText,
+            aiHint: hint,
             active: typeof data.active === 'boolean' ? data.active : false,
             targetPath: path,
-            readingMethodType: readingMethodType,
+            readingMethodType: readingMethodType, // Consistently lowercase
             position: typeof data.position === 'number' ? data.position : 0,
           } as TileInfo;
         }).filter(Boolean) as TileInfo[];
         
-        if (fetchedTilesData.length === 0) {
-          console.warn("No valid tiles found in 'appTiles' collection or all fetched items failed validation.");
+        if (fetchedTilesData.length === 0 && querySnapshot.docs.length > 0) {
+          console.warn("All fetched items from 'appTiles' were filtered out. Check document IDs and `VALID_READING_TYPES` alignment.");
+        } else if (querySnapshot.docs.length === 0) {
+          console.warn("No documents found in 'appTiles' collection matching the query.");
         }
         setTiles(fetchedTilesData);
 
@@ -91,7 +98,7 @@ export default function GatewayPage() {
   const handleTileClick = (tile: TileInfo) => {
     if (tile.active && tile.targetPath) {
       if (typeof window !== 'undefined') {
-        localStorage.setItem('selectedReadingType', tile.readingMethodType);
+        localStorage.setItem('selectedReadingType', tile.readingMethodType); // readingMethodType is lowercase
       }
       router.push(tile.targetPath);
     }
@@ -130,7 +137,7 @@ export default function GatewayPage() {
             <ImageOff className="h-4 w-4" />
             <AlertTitle>No Paths Available</AlertTitle>
             <AlertDescription>
-              It seems there are no divination choices available at the moment. Please check back later.
+              It seems there are no divination choices available at the moment. Please check back later or ensure 'appTiles' collection is correctly populated.
             </AlertDescription>
           </Alert>
         ) : (
@@ -174,3 +181,4 @@ export default function GatewayPage() {
     </div>
   );
 }
+    
