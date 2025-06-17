@@ -40,40 +40,34 @@ export default function GatewayPage() {
           orderBy('position', 'asc')
         );
 
-        console.log("[GatewayPage] Fetching tiles from Firestore collection: 'appTiles', ordered by 'position ASC'");
         const querySnapshot = await getDocs(tilesQuery);
         
-        console.log(`[GatewayPage] Firestore querySnapshot received. Number of documents: ${querySnapshot.docs.length}`);
-        querySnapshot.docs.forEach((doc, index) => {
-          console.log(`[GatewayPage] Raw Document ${index + 1} - ID: ${doc.id}, Data:`, JSON.parse(JSON.stringify(doc.data())));
-        });
-
         const fetchedTilesData = querySnapshot.docs.map(doc => {
           const data = doc.data();
           const docId = doc.id; 
           const lowercasedDocId = docId.toLowerCase();
 
           if (!VALID_READING_TYPES.includes(lowercasedDocId as TileInfo['readingMethodType'])) {
-            console.warn(`[GatewayPage] Filtering out tile. Original ID: "${docId}", Lowercased: "${lowercasedDocId}". Not in VALID_READING_TYPES: ${VALID_READING_TYPES.join(', ')}.`);
+            console.warn(`[GatewayPage] Filtering out tile with ID: "${docId}" (lowercased: "${lowercasedDocId}") as it's not in VALID_READING_TYPES.`);
             return null;
           }
           const readingMethodType = lowercasedDocId as TileInfo['readingMethodType'];
           
-          const altText = typeof data.imageAlt === 'string' && data.imageAlt.trim() !== ''
+          const altText = (typeof data.imageAlt === 'string' && data.imageAlt.trim() !== '')
                                 ? data.imageAlt
                                 : `${readingMethodType.charAt(0).toUpperCase() + readingMethodType.slice(1)} Reading Tile`;
 
-          const hint = typeof data.aiHint === 'string' && data.aiHint.trim() !== '' 
+          const hint = (typeof data.aiHint === 'string' && data.aiHint.trim() !== '') 
                         ? data.aiHint 
                         : readingMethodType;
           
-          const path = typeof data.targetPath === 'string' && data.targetPath.startsWith('/')
+          const path = (typeof data.targetPath === 'string' && data.targetPath.startsWith('/'))
                         ? data.targetPath
                         : '/get-reading';
 
           return {
             id: docId, 
-            imageURL: data.tileURL && typeof data.tileURL === 'string' 
+            imageURL: (data.tileURL && typeof data.tileURL === 'string') 
                         ? data.tileURL 
                         : 'https://placehold.co/300x450.png?text=Image+Not+Found',
             imageAlt: altText,
@@ -83,10 +77,10 @@ export default function GatewayPage() {
             readingMethodType: readingMethodType,
             position: typeof data.position === 'number' ? data.position : 0,
           } as TileInfo;
-        }).filter(Boolean) as TileInfo[];
+        }).filter(Boolean) as TileInfo[]; 
         
         if (fetchedTilesData.length === 0 && querySnapshot.docs.length > 0) {
-          console.warn("[GatewayPage] All fetched items from 'appTiles' were filtered out after mapping. Check document IDs, `VALID_READING_TYPES` alignment, or mapping logic.");
+          console.warn("[GatewayPage] All fetched items from 'appTiles' were filtered out after mapping. Check document IDs and `VALID_READING_TYPES` alignment.");
         } else if (querySnapshot.docs.length === 0) {
           console.warn("[GatewayPage] No documents found in 'appTiles' collection matching the query.");
         }
