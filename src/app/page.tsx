@@ -17,10 +17,12 @@ interface TileInfo {
   imageAlt: string;
   aiHint: string;
   active: boolean;
-  targetPath?: string;
+  targetPath: string; // Will default if not provided from Firestore
   readingMethodType: 'tea' | 'coffee' | 'tarot' | 'runes';
   position: number;
 }
+
+const VALID_READING_TYPES: TileInfo['readingMethodType'][] = ['tea', 'coffee', 'tarot', 'runes'];
 
 export default function GatewayPage() {
   const router = useRouter();
@@ -34,30 +36,35 @@ export default function GatewayPage() {
       setError(null);
       try {
         const tilesQuery = query(
-          collection(db, 'appTiles'), // Changed collection name
+          collection(db, 'appTiles'),
           orderBy('position', 'asc')
         );
         const querySnapshot = await getDocs(tilesQuery);
         
-        const validReadingTypes: TileInfo['readingMethodType'][] = ['tea', 'coffee', 'tarot', 'runes'];
-
         const fetchedTilesData = querySnapshot.docs.map(doc => {
           const data = doc.data();
-          const docId = doc.id as TileInfo['readingMethodType'];
+          const docId = doc.id;
 
-          if (!validReadingTypes.includes(docId)) {
-            console.warn(`Skipping tile with invalid id/type: ${docId} from 'appTiles' collection.`);
+          if (!VALID_READING_TYPES.includes(docId as TileInfo['readingMethodType'])) {
+            console.warn(`Skipping tile with invalid id/type: ${docId} from 'appTiles' collection. Document ID must be one of: ${VALID_READING_TYPES.join(', ')}.`);
             return null;
           }
+          const readingMethodType = docId as TileInfo['readingMethodType'];
 
           return {
             id: docId,
-            imageURL: data.tileURL || 'https://placehold.co/300x450.png?text=Image+Not+Found',
-            imageAlt: `${docId.charAt(0).toUpperCase() + docId.slice(1)} Reading Tile`,
-            aiHint: docId,
+            imageURL: data.tileURL && typeof data.tileURL === 'string' 
+                        ? data.tileURL 
+                        : 'https://placehold.co/300x450.png?text=Image+Not+Found',
+            imageAlt: typeof data.imageAlt === 'string' 
+                        ? data.imageAlt 
+                        : `${readingMethodType.charAt(0).toUpperCase() + readingMethodType.slice(1)} Reading Tile`,
+            aiHint: typeof data.aiHint === 'string' ? data.aiHint : readingMethodType,
             active: typeof data.active === 'boolean' ? data.active : false,
-            targetPath: '/get-reading', // All tiles lead to get-reading page
-            readingMethodType: docId,
+            targetPath: typeof data.targetPath === 'string' && data.targetPath.startsWith('/') 
+                        ? data.targetPath 
+                        : '/get-reading', // Default if not provided or invalid
+            readingMethodType: readingMethodType,
             position: typeof data.position === 'number' ? data.position : 0,
           } as TileInfo;
         }).filter(Boolean) as TileInfo[]; // filter(Boolean) removes any null entries from validation
@@ -163,3 +170,4 @@ export default function GatewayPage() {
     </div>
   );
 }
+
