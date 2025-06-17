@@ -8,7 +8,7 @@ import { ImageUploadForm } from '@/components/sipnread/ImageUploadForm';
 import { getTeaLeafAiAnalysisAction, type FullInterpretationResult } from '../actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, AlertCircle, Send, CheckCircle, Wand2, UserX, Brain, Database, ArrowLeft, LogIn, UserPlus, LockKeyhole } from 'lucide-react';
+import { Loader2, AlertCircle, Send, CheckCircle, Wand2, Brain, Database, ArrowLeft, LogIn, UserPlus, LockKeyhole } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
@@ -82,12 +82,22 @@ export default function GetReadingPage() {
     fetchAudioTracks();
   }, []);
 
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user) {
+        setShowLoginPromptCard(true);
+      } else {
+        setShowLoginPromptCard(false);
+      }
+    }
+  }, [user, authLoading]);
+
 
   useEffect(() => {
-    if (overallLoading && transitionContainerRef.current) {
+    if (showLoginPromptCard && loginPromptCardRef.current) {
+        loginPromptCardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (overallLoading && transitionContainerRef.current) {
       transitionContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } else if (showLoginPromptCard && loginPromptCardRef.current) {
-      loginPromptCardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center'});
     }
   }, [overallLoading, showLoginPromptCard]);
 
@@ -107,10 +117,10 @@ export default function GetReadingPage() {
       setResult(null);
       setIsLoadingAI(false);
       setIsSavingReading(false);
-      setShowLoginPromptCard(true);
+      setShowLoginPromptCard(true); // Ensure prompt is shown if somehow bypassed
       return;
     }
-    setShowLoginPromptCard(false); // Hide prompt if user is now logged in
+    setShowLoginPromptCard(false); 
 
     setIsLoadingAI(true);
     setIsSavingReading(false);
@@ -257,7 +267,34 @@ export default function GetReadingPage() {
       </header>
 
       <main className="w-full max-w-xl space-y-8">
-        {!showLoginPromptCard ? (
+        {showLoginPromptCard ? (
+          <div ref={loginPromptCardRef} className="w-full max-w-xl">
+            <Card className="shadow-lg animate-fade-in text-center">
+              <CardHeader>
+                <LockKeyhole className="mx-auto h-12 w-12 text-primary mb-3" />
+                <CardTitle className="text-2xl font-headline">Unlock Your Personalized Reading</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground mb-6">
+                  Sign in or create a free account to receive your insightful readings, save your past sessions, and access exclusive features.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <Button onClick={() => router.push('/login')} className="w-full sm:w-auto">
+                    <LogIn className="mr-2 h-4 w-4" /> Sign In
+                  </Button>
+                  <Button onClick={() => router.push('/signup')} variant="secondary" className="w-full sm:w-auto">
+                    <UserPlus className="mr-2 h-4 w-4" /> Create Account
+                  </Button>
+                </div>
+              </CardContent>
+              <CardFooter className="flex justify-center pt-4">
+                <Button variant="outline" onClick={() => setShowLoginPromptCard(false)}>
+                  <ArrowLeft className="mr-2 h-4 w-4" /> Back to Form
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
+        ) : (
           <div ref={transitionContainerRef} className="relative min-h-[450px]">
             <div
               className={cn(
@@ -324,33 +361,6 @@ export default function GetReadingPage() {
                 </>
               )}
             </div>
-          </div>
-        ) : (
-          <div ref={loginPromptCardRef} className="w-full max-w-xl">
-            <Card className="shadow-lg animate-fade-in text-center">
-              <CardHeader>
-                <LockKeyhole className="mx-auto h-12 w-12 text-primary mb-3" />
-                <CardTitle className="text-2xl font-headline">Unlock Your Personalized Reading</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground mb-6">
-                  Sign in or create a free account to receive your insightful readings, save your past sessions, and access exclusive features.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <Button onClick={() => router.push('/login')} className="w-full sm:w-auto">
-                    <LogIn className="mr-2 h-4 w-4" /> Sign In
-                  </Button>
-                  <Button onClick={() => router.push('/signup')} variant="secondary" className="w-full sm:w-auto">
-                    <UserPlus className="mr-2 h-4 w-4" /> Create Account
-                  </Button>
-                </div>
-              </CardContent>
-              <CardFooter className="flex justify-center pt-4">
-                <Button variant="outline" onClick={() => setShowLoginPromptCard(false)}>
-                  <ArrowLeft className="mr-2 h-4 w-4" /> Back to Form
-                </Button>
-              </CardFooter>
-            </Card>
           </div>
         )}
       </main>
