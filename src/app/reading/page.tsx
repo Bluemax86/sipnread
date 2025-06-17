@@ -22,7 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import { app as firebaseApp, db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { SubmitRoxyReadingRequestCallableInput } from '@/../functions/src';
 
 interface StoredReadingResult extends AiAnalysisResult {
@@ -65,28 +65,23 @@ export default function ReadingPage() {
     const fetchAudioTracks = async () => {
       setIsAudioConfigLoading(true);
       try {
-        const docRef = doc(db, 'audioTracks', 'reading');
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.audioURLs && Array.isArray(data.audioURLs) && data.audioURLs.length > 0) {
-             const urls = data.audioURLs.filter((url: unknown): url is string => typeof url === 'string' && url.trim() !== '');
-            setReadingAudioUrls(urls);
-            if (urls.length > 0) {
-              const randomIndex = Math.floor(Math.random() * urls.length);
-              setSelectedReadingAudioUrl(urls[randomIndex]);
-            } else {
-              setSelectedReadingAudioUrl(null);
-              console.warn("AudioTracks 'reading' document: 'audioURLs' array is empty or contains invalid URLs.");
-            }
-          } else {
-            setSelectedReadingAudioUrl(null);
-            console.warn("AudioTracks 'reading' document: 'audioURLs' field is missing, not an array, or empty.");
+        const q = query(collection(db, 'audioTracks'), where('playOn', '==', 'reading'));
+        const querySnapshot = await getDocs(q);
+        const urls: string[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.audioURL && typeof data.audioURL === 'string' && data.audioURL.trim() !== '') {
+            urls.push(data.audioURL);
           }
+        });
+        
+        setReadingAudioUrls(urls);
+        if (urls.length > 0) {
+          const randomIndex = Math.floor(Math.random() * urls.length);
+          setSelectedReadingAudioUrl(urls[randomIndex]);
         } else {
           setSelectedReadingAudioUrl(null);
-          console.warn("AudioTracks document with ID 'reading' not found.");
+          console.warn("No 'reading' audio tracks found or 'audioURL' field missing/invalid in 'audioTracks' collection.");
         }
       } catch (error) {
         console.error("Error fetching 'reading' audio tracks:", error);

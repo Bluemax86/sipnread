@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import { app as firebaseApp, db } from '@/lib/firebase';
 import type { SaveReadingDataCallableInput, ReadingType } from '@/../functions/src';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 
 export default function GetReadingPage() {
@@ -46,28 +46,23 @@ export default function GetReadingPage() {
     const fetchAudioTracks = async () => {
       setIsAudioConfigLoading(true);
       try {
-        const docRef = doc(db, 'audioTracks', 'generating');
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.audioURLs && Array.isArray(data.audioURLs) && data.audioURLs.length > 0) {
-            const urls = data.audioURLs.filter((url: unknown): url is string => typeof url === 'string' && url.trim() !== '');
-            setGeneratingAudioUrls(urls);
-            if (urls.length > 0) {
-              const randomIndex = Math.floor(Math.random() * urls.length);
-              setSelectedAudioUrl(urls[randomIndex]);
-            } else {
-              setSelectedAudioUrl(null);
-              console.warn("AudioTracks 'generating' document: 'audioURLs' array is empty or contains invalid URLs.");
-            }
-          } else {
-            setSelectedAudioUrl(null);
-            console.warn("AudioTracks 'generating' document: 'audioURLs' field is missing, not an array, or empty.");
+        const q = query(collection(db, 'audioTracks'), where('playOn', '==', 'generating'));
+        const querySnapshot = await getDocs(q);
+        const urls: string[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.audioURL && typeof data.audioURL === 'string' && data.audioURL.trim() !== '') {
+            urls.push(data.audioURL);
           }
+        });
+
+        setGeneratingAudioUrls(urls);
+        if (urls.length > 0) {
+          const randomIndex = Math.floor(Math.random() * urls.length);
+          setSelectedAudioUrl(urls[randomIndex]);
         } else {
           setSelectedAudioUrl(null);
-          console.warn("AudioTracks document with ID 'generating' not found.");
+          console.warn("No 'generating' audio tracks found or 'audioURL' field missing/invalid in 'audioTracks' collection.");
         }
       } catch (error) {
         console.error("Error fetching 'generating' audio tracks:", error);
@@ -116,13 +111,14 @@ export default function GetReadingPage() {
         }
       loadingAudioRef.current.currentTime = 0; 
       loadingAudioRef.current.volume = 1; 
+      loadingAudioRef.current.loop = false; // Ensure loop is false
       loadingAudioRef.current.play().catch(error => console.warn("Audio play failed:", error));
       musicStartTimeRef.current = Date.now(); 
     } else if (!selectedAudioUrl) {
         console.warn("No audio track selected or available to play during AI processing.");
         musicStartTimeRef.current = null; 
     } else {
-        musicStartTimeRef.current = Date.now(); // Still set start time if audio ref not ready but URL exists
+        musicStartTimeRef.current = Date.now(); 
     }
     
     let aiAnalysisResponse: FullInterpretationResult | null = null;
@@ -143,7 +139,7 @@ export default function GetReadingPage() {
       if (aiAnalysisResponse.error || !aiAnalysisResponse.aiInterpretation) {
         errorForState = aiAnalysisResponse.error || "Failed to get AI interpretation.";
       } else {
-        setIsLoadingAI(false); // AI part done, now saving
+        setIsLoadingAI(false); 
         setIsSavingReading(true); 
 
         const functions = getFunctions(firebaseApp);
@@ -189,10 +185,12 @@ export default function GetReadingPage() {
       }
     } finally {
       const performFinalActions = () => {
-        if (loadingAudioRef.current) {
-          loadingAudioRef.current.pause();
-          loadingAudioRef.current.currentTime = 0;
-        }
+        // No need to pause audio here as it's 10s long and plays once.
+        // If audioRef.current exists and you want to be explicit about stopping it on early exit:
+        // if (loadingAudioRef.current) {
+        //   loadingAudioRef.current.pause();
+        //   loadingAudioRef.current.currentTime = 0;
+        // }
         
         setIsLoadingAI(false);
         setIsSavingReading(false);
@@ -208,8 +206,8 @@ export default function GetReadingPage() {
           localStorage.setItem('teaLeafReadingResult', JSON.stringify(finalResultForState));
         } else {
           setResult({ 
-            ...(aiAnalysisResponse || {}), // Spread aiAnalysisResponse if it exists
-            readingType: aiAnalysisResponse?.readingType, // Ensure readingType is passed even on error if available
+            ...(aiAnalysisResponse || {}),
+            readingType: aiAnalysisResponse?.readingType,
             error: errorForState || "An unknown error occurred after processing." 
           });
         }
@@ -218,7 +216,7 @@ export default function GetReadingPage() {
       const processingEndTime = Date.now();
       const musicStartedAt = musicStartTimeRef.current;
       const elapsedTimeMs = musicStartedAt ? processingEndTime - musicStartedAt : Infinity; 
-      const minDisplayTimeMs = 10000; // 10 seconds
+      const minDisplayTimeMs = 10000; 
 
       if (musicStartedAt && elapsedTimeMs < minDisplayTimeMs) {
         const delayMs = minDisplayTimeMs - elapsedTimeMs;
@@ -289,7 +287,7 @@ export default function GetReadingPage() {
                   <p className="ml-4 text-lg mt-4 text-muted-foreground">AI is interpreting your leaves...</p>
                 </>
               )}
-              {isSavingReading && !isLoadingAI && ( // Show saving only if AI is done
+              {isSavingReading && !isLoadingAI && ( 
                 <>
                   <Database className="h-12 w-12 animate-pulse text-primary" />
                   <p className="ml-4 text-lg mt-4 text-muted-foreground">Saving your reading...</p>
