@@ -35,7 +35,7 @@ export default function GatewayPage() {
       try {
         const validReadingTypes: TileInfo['readingMethodType'][] = ['tea', 'coffee', 'tarot', 'runes'];
         const tilesQuery = query(
-          collection(db, 'app_tiles'), // Updated collection name
+          collection(db, 'app_tiles'),
           where('type', 'in', validReadingTypes),
           orderBy('position', 'asc')
         );
@@ -43,16 +43,17 @@ export default function GatewayPage() {
         const fetchedTilesData = querySnapshot.docs.map(doc => {
           const data = doc.data();
           const typeFromData = data.type as TileInfo['readingMethodType'];
+          
           const readingMethodType = validReadingTypes.includes(typeFromData)
                                    ? typeFromData
                                    : 'tea'; // Default to 'tea' if data.type is somehow invalid
 
           return {
             id: doc.id,
-            imageURL: data.tileURL || 'https://placehold.co/300x450.png?text=Image+Not+Found', // Use tileURL
+            imageURL: data.tileURL || 'https://placehold.co/300x450.png?text=Image+Not+Found',
             imageAlt: data.imageAlt || `${readingMethodType.charAt(0).toUpperCase() + readingMethodType.slice(1)} Tile`,
             aiHint: data.aiHint || readingMethodType,
-            active: data.status === 'active', // Determine active state from status field
+            active: data.status === 'active',
             targetPath: data.targetPath || '/get-reading',
             readingMethodType: readingMethodType,
             position: typeof data.position === 'number' ? data.position : 0,
