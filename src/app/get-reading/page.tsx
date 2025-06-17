@@ -3,17 +3,18 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ImageUploadForm } from '@/components/sipnread/ImageUploadForm';
 import { getTeaLeafAiAnalysisAction, type FullInterpretationResult } from '../actions';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle, Send, CheckCircle, Wand2, UserX, Brain, Database } from 'lucide-react';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2, AlertCircle, Send, CheckCircle, Wand2, UserX, Brain, Database, ArrowLeft, LogIn, UserPlus, LockKeyhole } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import { app as firebaseApp, db } from '@/lib/firebase';
 import type { SaveReadingDataCallableInput, ReadingType } from '@/../functions/src';
-import { doc, getDoc } from 'firebase/firestore'; // Import doc and getDoc
+import { doc, getDoc } from 'firebase/firestore';
 
 
 export default function GetReadingPage() {
@@ -23,7 +24,8 @@ export default function GetReadingPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const transitionContainerRef = useRef<HTMLDivElement>(null);
-  // selectedReadingTypeForDisplay is for UI only, not for critical data path.
+  const loginPromptCardRef = useRef<HTMLDivElement>(null);
+
   const [selectedReadingTypeForDisplay, setSelectedReadingTypeForDisplay] = useState<string | null>(null);
 
   const loadingAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -32,6 +34,8 @@ export default function GetReadingPage() {
   const [generatingAudioUrls, setGeneratingAudioUrls] = useState<string[]>([]);
   const [selectedAudioUrl, setSelectedAudioUrl] = useState<string | null>(null);
   const [isAudioConfigLoading, setIsAudioConfigLoading] = useState(true);
+
+  const [showLoginPromptCard, setShowLoginPromptCard] = useState(false);
 
   const overallLoading = isLoadingAI || isSavingReading;
 
@@ -82,12 +86,13 @@ export default function GetReadingPage() {
   useEffect(() => {
     if (overallLoading && transitionContainerRef.current) {
       transitionContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (showLoginPromptCard && loginPromptCardRef.current) {
+      loginPromptCardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center'});
     }
-  }, [overallLoading]);
+  }, [overallLoading, showLoginPromptCard]);
 
   useEffect(() => {
     const audioPlayer = loadingAudioRef.current;
-    // Cleanup function to pause audio if component unmounts unexpectedly
     return () => {
       if (audioPlayer) {
         audioPlayer.pause();
@@ -99,9 +104,13 @@ export default function GetReadingPage() {
 
   const handleInterpretation = async (imageStorageUrls: string[], question?: string, userSymbolNames?: string[]) => {
     if (!user) {
-      setResult({ error: "You must be logged in to get a reading." });
+      setResult(null);
+      setIsLoadingAI(false);
+      setIsSavingReading(false);
+      setShowLoginPromptCard(true);
       return;
     }
+    setShowLoginPromptCard(false); // Hide prompt if user is now logged in
 
     setIsLoadingAI(true);
     setIsSavingReading(false);
@@ -115,7 +124,7 @@ export default function GetReadingPage() {
         }
       loadingAudioRef.current.currentTime = 0;
       loadingAudioRef.current.volume = 1;
-      loadingAudioRef.current.loop = false; // Ensure loop is false
+      loadingAudioRef.current.loop = false;
       loadingAudioRef.current.play().catch(error => console.warn("Audio play failed:", error));
       musicStartTimeRef.current = Date.now();
     } else if (!selectedAudioUrl) {
@@ -189,12 +198,6 @@ export default function GetReadingPage() {
       }
     } finally {
       const performFinalActions = () => {
-        // No need to pause audio here as it's 10s long and plays once.
-        // if (loadingAudioRef.current) {
-        //   loadingAudioRef.current.pause();
-        //   loadingAudioRef.current.currentTime = 0;
-        // }
-
         setIsLoadingAI(false);
         setIsSavingReading(false);
 
@@ -246,7 +249,6 @@ export default function GetReadingPage() {
       <audio
         ref={loadingAudioRef}
         key={selectedAudioUrl}
-        // No loop attribute
       />
       <header className="text-center mb-10">
         <Wand2 className="mx-auto h-16 w-16 text-primary mb-4" />
@@ -255,20 +257,8 @@ export default function GetReadingPage() {
       </header>
 
       <main className="w-full max-w-xl space-y-8">
-        {!user && !authLoading && (
-          <Alert variant="destructive">
-            <UserX className="h-4 w-4" />
-            <AlertTitle>Authentication Required</AlertTitle>
-            <AlertDescription>
-              You need to be logged in to get a tea leaf reading. Please{' '}
-              <Button variant="link" className="p-0 h-auto" onClick={() => router.push('/login')}>log in</Button> or{' '}
-              <Button variant="link" className="p-0 h-auto" onClick={() => router.push('/signup')}>sign up</Button>.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {user && (
-           <div ref={transitionContainerRef} className="relative min-h-[450px]">
+        {!showLoginPromptCard ? (
+          <div ref={transitionContainerRef} className="relative min-h-[450px]">
             <div
               className={cn(
                 "transition-opacity duration-300 ease-in-out",
@@ -307,12 +297,18 @@ export default function GetReadingPage() {
               {(result && !overallLoading) && (
                 <>
                   {result.error && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>Reading Process Error</AlertTitle>
-                      <AlertDescription>{result.error}</AlertDescription>
-                       <Button onClick={() => { setResult(null); setIsLoadingAI(false); setIsSavingReading(false); musicStartTimeRef.current = null; }} variant="outline" className="mt-4">Try Again</Button>
-                    </Alert>
+                    <Card className="w-full max-w-xl shadow-lg animate-fade-in text-center">
+                      <CardHeader>
+                        <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-3" />
+                        <CardTitle className="text-2xl font-headline text-destructive">Reading Process Error</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-muted-foreground mb-6">{result.error}</p>
+                        <Button onClick={() => { setResult(null); setIsLoadingAI(false); setIsSavingReading(false); musicStartTimeRef.current = null; setShowLoginPromptCard(false); }} variant="outline">
+                          Try Again
+                        </Button>
+                      </CardContent>
+                    </Card>
                   )}
                   {result.aiInterpretation && result.readingId && !result.error && (
                     <div className="p-6 bg-card rounded-lg shadow-md text-center">
@@ -328,6 +324,33 @@ export default function GetReadingPage() {
                 </>
               )}
             </div>
+          </div>
+        ) : (
+          <div ref={loginPromptCardRef} className="w-full max-w-xl">
+            <Card className="shadow-lg animate-fade-in text-center">
+              <CardHeader>
+                <LockKeyhole className="mx-auto h-12 w-12 text-primary mb-3" />
+                <CardTitle className="text-2xl font-headline">Unlock Your Personalized Reading</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground mb-6">
+                  Sign in or create a free account to receive your insightful readings, save your past sessions, and access exclusive features.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <Button onClick={() => router.push('/login')} className="w-full sm:w-auto">
+                    <LogIn className="mr-2 h-4 w-4" /> Sign In
+                  </Button>
+                  <Button onClick={() => router.push('/signup')} variant="secondary" className="w-full sm:w-auto">
+                    <UserPlus className="mr-2 h-4 w-4" /> Create Account
+                  </Button>
+                </div>
+              </CardContent>
+              <CardFooter className="flex justify-center pt-4">
+                <Button variant="outline" onClick={() => setShowLoginPromptCard(false)}>
+                  <ArrowLeft className="mr-2 h-4 w-4" /> Back to Form
+                </Button>
+              </CardFooter>
+            </Card>
           </div>
         )}
       </main>
