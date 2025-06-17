@@ -1,37 +1,32 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { InterpretationDisplay } from '@/components/sipnread/InterpretationDisplay';
-import type { AiAnalysisResult } from '@/app/actions'; // Changed from InterpretationResult
-// submitRoxyReadingRequestAction is no longer directly used by this component for this flow
+import type { AiAnalysisResult } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   AlertDialog,
   AlertDialogAction,
-  // AlertDialogCancel, // Unused import
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  // AlertDialogTrigger, // Unused import
 } from "@/components/ui/alert-dialog";
-import { Loader2, AlertCircle, ArrowLeft, BookOpenText, Wand2, Gem, Send, Brain } from 'lucide-react';
+import { Loader2, AlertCircle, ArrowLeft, BookOpenText, Wand2, Gem, Send, Brain, Volume2, VolumeX } from 'lucide-react'; // Added Volume2, VolumeX
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import { app as firebaseApp } from '@/lib/firebase';
-import type { SubmitRoxyReadingRequestCallableInput } from '@/../functions/src'; // For type safety
+import type { SubmitRoxyReadingRequestCallableInput } from '@/../functions/src';
 
-// This type represents the data structure stored in localStorage
 interface StoredReadingResult extends AiAnalysisResult {
   readingId?: string; 
 }
-
 
 export default function ReadingPage() {
   const [reading, setReading] = useState<StoredReadingResult | null>(null);
@@ -41,6 +36,9 @@ export default function ReadingPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
+
+  const backgroundAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -58,8 +56,46 @@ export default function ReadingPage() {
     }
   }, []);
 
+  useEffect(() => {
+    const audio = backgroundAudioRef.current;
+    if (audio && reading && !reading.error && !isLoadingStorage) {
+      if (!isMuted) {
+        audio.play().catch(error => {
+          console.warn("Background audio autoplay prevented. User interaction might be needed or browser settings are blocking it.", error);
+        });
+      } else {
+        // If initially muted, don't play.
+        // The `muted` property is handled by the next useEffect.
+      }
+    }
+    // Cleanup on unmount
+    return () => {
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    };
+  }, [isMuted, reading, isLoadingStorage]);
+
+  useEffect(() => {
+    if (backgroundAudioRef.current) {
+      backgroundAudioRef.current.muted = isMuted;
+       if (!isMuted && backgroundAudioRef.current.paused && reading && !reading.error) {
+        // If unmuted and audio was paused (e.g., by browser initially or explicitly)
+        // and reading is ready, try to play.
+        backgroundAudioRef.current.play().catch(error => {
+          console.warn("Playback attempt after unmute failed:", error);
+        });
+      }
+    }
+  }, [isMuted, reading]);
+
+  const toggleMute = () => {
+    setIsMuted(!isMuted);
+  };
+
   const handleRequestRoxyReading = async () => {
-    if (!user || !user.email) { // Ensure user and user.email are available
+    if (!user || !user.email) {
       toast({
         variant: "destructive",
         title: "Authentication Required",
@@ -85,7 +121,7 @@ export default function ReadingPage() {
       >(functions, 'submitRoxyReadingRequestCallable');
 
       const payload: SubmitRoxyReadingRequestCallableInput = {
-        userEmail: user.email, // Use the authenticated user's email
+        userEmail: user.email,
         originalReadingId: reading.readingId,
       };
 
@@ -111,7 +147,6 @@ export default function ReadingPage() {
       setIsSubmittingRoxyRequest(false);
     }
   };
-
 
   if (authLoading || isLoadingStorage) {
     return (
@@ -148,12 +183,18 @@ export default function ReadingPage() {
   
   return (
     <div className="container mx-auto min-h-screen flex flex-col items-center py-8 selection:bg-accent selection:text-accent-foreground">
-      <header className="text-center mb-6 w-full max-w-xl flex flex-col items-start">
-         <Button onClick={() => router.push('/get-reading')} variant="outline" className="mb-6 self-start">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          New Reading
-        </Button>
-        <div className="flex items-center justify-center mb-4 w-full">
+      <audio ref={backgroundAudioRef} src="/audio/Whispers.MP3" loop />
+      <header className="mb-6 w-full max-w-xl flex flex-col items-center">
+         <div className="w-full flex justify-between items-center mb-6">
+            <Button onClick={() => router.push('/get-reading')} variant="outline" className="self-start">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              New Reading
+            </Button>
+            <Button onClick={toggleMute} variant="outline" size="icon" className="self-start" aria-label={isMuted ? "Unmute background audio" : "Mute background audio"}>
+              {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+            </Button>
+         </div>
+        <div className="flex items-center justify-center mb-4">
           <BookOpenText className="h-12 w-12 text-primary mr-3" />
           <h1 className="text-4xl md:text-5xl font-headline text-primary tracking-tight">Your Reading</h1>
         </div>
@@ -184,7 +225,6 @@ export default function ReadingPage() {
           </Card>
         )}
 
-        {/* Roxy O'Reilly Personalized Reading Card */}
         {reading.aiInterpretation && !reading.error && user && (
           <Card className="w-full shadow-lg animate-fade-in border-accent">
             <CardHeader className="flex flex-row items-center gap-3">
@@ -237,7 +277,7 @@ export default function ReadingPage() {
               <AlertDialogFooter>
                 <AlertDialogAction onClick={() => {
                   setShowRoxyDialog(false);
-                  router.push('/'); // Navigate to home, or /my-readings could also be an option
+                  router.push('/'); 
                 }}>
                   OK
                 </AlertDialogAction>
