@@ -27,6 +27,7 @@ export default function GetReadingPage() {
   const [selectedReadingTypeForDisplay, setSelectedReadingTypeForDisplay] = useState<string | null>(null);
 
   const loadingAudioRef = useRef<HTMLAudioElement | null>(null);
+  const musicStartTimeRef = useRef<number | null>(null);
   
   const [generatingAudioUrls, setGeneratingAudioUrls] = useState<string[]>([]);
   const [selectedAudioUrl, setSelectedAudioUrl] = useState<string | null>(null);
@@ -81,6 +82,7 @@ export default function GetReadingPage() {
 
   useEffect(() => {
     const audioPlayer = loadingAudioRef.current;
+    // Cleanup function to pause audio if component unmounts unexpectedly
     return () => {
       if (audioPlayer) {
         audioPlayer.pause();
@@ -97,20 +99,24 @@ export default function GetReadingPage() {
     }
 
     setIsLoadingAI(true);
-    setIsSavingReading(false);
+    setIsSavingReading(false); 
     setResult(null);
     localStorage.removeItem('teaLeafReadingResult');
 
     if (loadingAudioRef.current && selectedAudioUrl) {
         if(loadingAudioRef.current.src !== selectedAudioUrl) {
             loadingAudioRef.current.src = selectedAudioUrl;
-            loadingAudioRef.current.load(); // Ensure new source is loaded
+            loadingAudioRef.current.load(); 
         }
       loadingAudioRef.current.currentTime = 0; 
       loadingAudioRef.current.volume = 1; 
       loadingAudioRef.current.play().catch(error => console.warn("Audio play failed:", error));
+      musicStartTimeRef.current = Date.now(); 
     } else if (!selectedAudioUrl) {
         console.warn("No audio track selected or available to play during AI processing.");
+        musicStartTimeRef.current = null; 
+    } else {
+        musicStartTimeRef.current = Date.now(); // Still set start time if audio ref not ready but URL exists
     }
     
     let aiAnalysisResponse: FullInterpretationResult | null = null;
@@ -131,6 +137,7 @@ export default function GetReadingPage() {
       if (aiAnalysisResponse.error || !aiAnalysisResponse.aiInterpretation) {
         errorForState = aiAnalysisResponse.error || "Failed to get AI interpretation.";
       } else {
+        setIsLoadingAI(false); // AI part done, now saving
         setIsSavingReading(true); 
 
         const functions = getFunctions(firebaseApp);
@@ -175,7 +182,7 @@ export default function GetReadingPage() {
          errorForState = e instanceof Error ? e.message : 'An unexpected error occurred.';
       }
     } finally {
-      const performFinalActions = () => { // Removed async as fadeOutAudio is gone
+      const performFinalActions = () => {
         if (loadingAudioRef.current) {
           loadingAudioRef.current.pause();
           loadingAudioRef.current.currentTime = 0;
@@ -195,14 +202,24 @@ export default function GetReadingPage() {
           localStorage.setItem('teaLeafReadingResult', JSON.stringify(finalResultForState));
         } else {
           setResult({ 
-            ...(aiAnalysisResponse || {}),
-            readingType: aiAnalysisResponse?.readingType, 
+            ...(aiAnalysisResponse || {}), // Spread aiAnalysisResponse if it exists
+            readingType: aiAnalysisResponse?.readingType, // Ensure readingType is passed even on error if available
             error: errorForState || "An unknown error occurred after processing." 
           });
         }
       };
       
-      performFinalActions(); // Call directly, no delay logic needed
+      const processingEndTime = Date.now();
+      const musicStartedAt = musicStartTimeRef.current;
+      const elapsedTimeMs = musicStartedAt ? processingEndTime - musicStartedAt : Infinity; // If no music, no delay.
+      const minDisplayTimeMs = 10000; // 10 seconds
+
+      if (musicStartedAt && elapsedTimeMs < minDisplayTimeMs) {
+        const delayMs = minDisplayTimeMs - elapsedTimeMs;
+        setTimeout(performFinalActions, delayMs);
+      } else {
+        performFinalActions();
+      }
     }
   };
 
@@ -222,6 +239,7 @@ export default function GetReadingPage() {
       <audio
         ref={loadingAudioRef}
         key={selectedAudioUrl} 
+        // No loop attribute
       />
       <header className="text-center mb-10">
         <Wand2 className="mx-auto h-16 w-16 text-primary mb-4" />
@@ -265,7 +283,7 @@ export default function GetReadingPage() {
                   <p className="ml-4 text-lg mt-4 text-muted-foreground">AI is interpreting your leaves...</p>
                 </>
               )}
-              {isSavingReading && !isLoadingAI && (
+              {isSavingReading && !isLoadingAI && ( // Show saving only if AI is done
                 <>
                   <Database className="h-12 w-12 animate-pulse text-primary" />
                   <p className="ml-4 text-lg mt-4 text-muted-foreground">Saving your reading...</p>
@@ -286,7 +304,7 @@ export default function GetReadingPage() {
                       <AlertCircle className="h-4 w-4" />
                       <AlertTitle>Reading Process Error</AlertTitle>
                       <AlertDescription>{result.error}</AlertDescription>
-                       <Button onClick={() => { setResult(null); setIsLoadingAI(false); setIsSavingReading(false); }} variant="outline" className="mt-4">Try Again</Button>
+                       <Button onClick={() => { setResult(null); setIsLoadingAI(false); setIsSavingReading(false); musicStartTimeRef.current = null; }} variant="outline" className="mt-4">Try Again</Button>
                     </Alert>
                   )}
                   {result.aiInterpretation && result.readingId && !result.error && (
@@ -312,5 +330,4 @@ export default function GetReadingPage() {
     </div>
   );
 }
-
     
