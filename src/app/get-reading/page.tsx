@@ -26,6 +26,7 @@ export default function GetReadingPage() {
   const [selectedReadingTypeForDisplay, setSelectedReadingTypeForDisplay] = useState<string | null>(null);
 
   const loadingAudioRef = useRef<HTMLAudioElement | null>(null);
+  const fadeOutIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const overallLoading = isLoadingAI || isSavingReading;
 
   useEffect(() => {
@@ -41,18 +42,50 @@ export default function GetReadingPage() {
     }
   }, [overallLoading]);
 
-  // Cleanup audio when component unmounts
   useEffect(() => {
     const audioPlayer = loadingAudioRef.current;
+    const fadeInterval = fadeOutIntervalRef.current;
     return () => {
       if (audioPlayer) {
         audioPlayer.pause();
         audioPlayer.currentTime = 0;
-        // Detach src to prevent potential background loading or errors after unmount
-        // audioPlayer.src = ''; // This might not be necessary and can sometimes cause issues if audio element is reused
+      }
+      if (fadeInterval) {
+        clearInterval(fadeInterval);
       }
     };
   }, []);
+
+  const fadeOutAudio = (audioElement: HTMLAudioElement, duration: number = 1500): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!audioElement || audioElement.paused) {
+        resolve();
+        return;
+      }
+
+      const initialVolume = audioElement.volume;
+      const steps = 50; 
+      const stepDuration = duration / steps;
+      const volumeDecrement = initialVolume / steps;
+
+      if (fadeOutIntervalRef.current) {
+        clearInterval(fadeOutIntervalRef.current);
+      }
+
+      fadeOutIntervalRef.current = setInterval(() => {
+        if (audioElement.volume > volumeDecrement) {
+          audioElement.volume -= volumeDecrement;
+        } else {
+          if (fadeOutIntervalRef.current) clearInterval(fadeOutIntervalRef.current);
+          fadeOutIntervalRef.current = null;
+          audioElement.pause();
+          audioElement.currentTime = 0;
+          audioElement.volume = initialVolume; 
+          resolve();
+        }
+      }, stepDuration);
+    });
+  };
 
 
   const handleInterpretation = async (imageStorageUrls: string[], question?: string, userSymbolNames?: string[]) => {
@@ -68,7 +101,8 @@ export default function GetReadingPage() {
 
     const audioPlayStartTime = Date.now();
     if (loadingAudioRef.current) {
-      loadingAudioRef.current.currentTime = 0; // Reset audio
+      loadingAudioRef.current.currentTime = 0; 
+      loadingAudioRef.current.volume = 1; // Ensure volume is reset
       loadingAudioRef.current.play().catch(error => console.warn("Audio play failed:", error));
     }
     
@@ -89,12 +123,8 @@ export default function GetReadingPage() {
 
       if (aiAnalysisResponse.error || !aiAnalysisResponse.aiInterpretation) {
         errorForState = aiAnalysisResponse.error || "Failed to get AI interpretation.";
-        // No throw here, will be handled in finally
       } else {
-        // AI Analysis done, now proceed to saving
-        // Keep isLoadingAI true for UI, but mark internal AI processing as done for logic
-        // setIsLoadingAI(false); // This will be set false after audio delay logic in finally
-        setIsSavingReading(true); // Now indicate saving
+        setIsSavingReading(true); 
 
         const functions = getFunctions(firebaseApp);
         const saveReadingData = httpsCallable<SaveReadingDataCallableInput, { success: boolean; readingId?: string; message?: string }>(functions, 'saveReadingDataCallable');
@@ -108,12 +138,12 @@ export default function GetReadingPage() {
         } else if (readingTypeForSave === null) {
             finalReadingTypeForPayload = null;
         } else {
-            finalReadingTypeForPayload = undefined;
+            finalReadingTypeForPayload = undefined; // Omit if not a valid type or explicitly not set
             if (readingTypeForSave !== null && readingTypeForSave !== undefined) {
-              console.warn(`[GetReadingPage] Unexpected readingType ('${readingTypeForSave}') from localStorage during save. Defaulting to undefined.`);
+              console.warn(`[GetReadingPage] Unexpected readingType ('${readingTypeForSave}') from localStorage during save. Defaulting to undefined for payload.`);
             }
         }
-
+        
         const saveDataPayload: SaveReadingDataCallableInput = {
           imageStorageUrls: aiAnalysisResponse.imageStorageUrls || imageStorageUrls,
           aiSymbolsDetected: aiAnalysisResponse.aiSymbolsDetected || [],
@@ -132,24 +162,27 @@ export default function GetReadingPage() {
           errorForState = saveResult.data.message || 'Failed to save reading data.';
         }
       }
-    } catch (e: unknown) { // Catch errors from AI action or save callable
+    } catch (e: unknown) { 
       console.error("Error during interpretation or saving process:", e);
-      if (!errorForState) { // If error wasn't already set by a non-throwing failure path
+      if (!errorForState) { 
          errorForState = e instanceof Error ? e.message : 'An unexpected error occurred.';
       }
     } finally {
       const processingActuallyFinished = !errorForState && saveSucceeded;
       const processingEndTime = Date.now();
       const audioPlayedDuration = processingEndTime - audioPlayStartTime;
-      const minAudioDuration = 15000; // 15 seconds
+      const minAudioDuration = 15000; 
+      const fadeDuration = 1500;
       
-      // Only delay if processing was successful AND audio hasn't played for 15s yet
-      const delayNeeded = processingActuallyFinished ? Math.max(0, minAudioDuration - audioPlayedDuration) : 0;
-
-      const performFinalActions = () => {
+      let delayNeeded = 0;
+      if (processingActuallyFinished) {
+        // Ensure audio plays for minAudioDuration, considering the fade out will take time
+        delayNeeded = Math.max(0, minAudioDuration - (audioPlayedDuration + fadeDuration));
+      }
+      
+      const performFinalActions = async () => {
         if (loadingAudioRef.current) {
-          loadingAudioRef.current.pause();
-          loadingAudioRef.current.currentTime = 0;
+          await fadeOutAudio(loadingAudioRef.current, fadeDuration);
         }
         
         setIsLoadingAI(false);
@@ -173,12 +206,9 @@ export default function GetReadingPage() {
       };
 
       if (delayNeeded > 0) {
-        // If we need to delay, the loading spinner (Brain icon via isLoadingAI) should remain.
-        // `isLoadingAI` is still true at this point. `isSavingReading` might be true.
-        // The `overallLoading` will keep the spinner container visible.
         setTimeout(performFinalActions, delayNeeded);
       } else {
-        performFinalActions();
+        await performFinalActions();
       }
     }
   };
