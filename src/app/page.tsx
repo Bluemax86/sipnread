@@ -17,7 +17,7 @@ interface TileInfo {
   imageAlt: string;
   aiHint: string;
   active: boolean;
-  targetPath: string; // Will default if not provided from Firestore
+  targetPath: string;
   readingMethodType: 'tea' | 'coffee' | 'tarot' | 'runes';
   position: number;
 }
@@ -46,28 +46,32 @@ export default function GatewayPage() {
           const docId = doc.id;
 
           if (!VALID_READING_TYPES.includes(docId as TileInfo['readingMethodType'])) {
-            console.warn(`Skipping tile with invalid id/type: ${docId} from 'appTiles' collection. Document ID must be one of: ${VALID_READING_TYPES.join(', ')}.`);
+            console.warn(`Skipping tile with invalid id/type: ${docId}. Document ID must be one of: ${VALID_READING_TYPES.join(', ')}.`);
             return null;
           }
           const readingMethodType = docId as TileInfo['readingMethodType'];
+          
+          const imageAltText = typeof data.imageAlt === 'string' && data.imageAlt.trim() !== ''
+                                ? data.imageAlt
+                                : `${readingMethodType.charAt(0).toUpperCase() + readingMethodType.slice(1)} Reading Tile`;
+
+          const path = typeof data.targetPath === 'string' && data.targetPath.startsWith('/')
+                        ? data.targetPath
+                        : '/get-reading';
 
           return {
             id: docId,
             imageURL: data.tileURL && typeof data.tileURL === 'string' 
                         ? data.tileURL 
                         : 'https://placehold.co/300x450.png?text=Image+Not+Found',
-            imageAlt: typeof data.imageAlt === 'string' 
-                        ? data.imageAlt 
-                        : `${readingMethodType.charAt(0).toUpperCase() + readingMethodType.slice(1)} Reading Tile`,
-            aiHint: typeof data.aiHint === 'string' ? data.aiHint : readingMethodType,
+            imageAlt: imageAltText,
+            aiHint: typeof data.aiHint === 'string' && data.aiHint.trim() !== '' ? data.aiHint : readingMethodType,
             active: typeof data.active === 'boolean' ? data.active : false,
-            targetPath: typeof data.targetPath === 'string' && data.targetPath.startsWith('/') 
-                        ? data.targetPath 
-                        : '/get-reading', // Default if not provided or invalid
+            targetPath: path,
             readingMethodType: readingMethodType,
             position: typeof data.position === 'number' ? data.position : 0,
           } as TileInfo;
-        }).filter(Boolean) as TileInfo[]; // filter(Boolean) removes any null entries from validation
+        }).filter(Boolean) as TileInfo[];
         
         if (fetchedTilesData.length === 0) {
           console.warn("No valid tiles found in 'appTiles' collection or all fetched items failed validation.");
@@ -170,4 +174,3 @@ export default function GatewayPage() {
     </div>
   );
 }
-
