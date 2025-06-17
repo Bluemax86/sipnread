@@ -35,31 +35,32 @@ export default function GatewayPage() {
       try {
         const validReadingTypes: TileInfo['readingMethodType'][] = ['tea', 'coffee', 'tarot', 'runes'];
         const tilesQuery = query(
-          collection(db, 'images'),
-          where('type', 'in', validReadingTypes), // Query for specific reading types
+          collection(db, 'app_tiles'), // Updated collection name
+          where('type', 'in', validReadingTypes),
           orderBy('position', 'asc')
         );
         const querySnapshot = await getDocs(tilesQuery);
         const fetchedTilesData = querySnapshot.docs.map(doc => {
           const data = doc.data();
           const typeFromData = data.type as TileInfo['readingMethodType'];
+          const readingMethodType = validReadingTypes.includes(typeFromData)
+                                   ? typeFromData
+                                   : 'tea'; // Default to 'tea' if data.type is somehow invalid
 
           return {
             id: doc.id,
-            imageURL: data.imageURL || 'https://placehold.co/300x450.png?text=Image+Not+Found',
-            imageAlt: data.imageAlt || `${typeFromData ? typeFromData.charAt(0).toUpperCase() + typeFromData.slice(1) : 'Divination'} Tile`,
-            aiHint: data.aiHint || typeFromData || 'divination',
-            active: typeof data.active === 'boolean' ? data.active : false,
-            targetPath: data.targetPath || '/get-reading', // Default targetPath
-            readingMethodType: validReadingTypes.includes(typeFromData)
-                               ? typeFromData
-                               : 'tea', // Default to 'tea' if data.type is somehow invalid
+            imageURL: data.tileURL || 'https://placehold.co/300x450.png?text=Image+Not+Found', // Use tileURL
+            imageAlt: data.imageAlt || `${readingMethodType.charAt(0).toUpperCase() + readingMethodType.slice(1)} Tile`,
+            aiHint: data.aiHint || readingMethodType,
+            active: data.status === 'active', // Determine active state from status field
+            targetPath: data.targetPath || '/get-reading',
+            readingMethodType: readingMethodType,
             position: typeof data.position === 'number' ? data.position : 0,
           } as TileInfo;
         });
         
         if (fetchedTilesData.length === 0) {
-          console.warn("No tiles found for types 'tea', 'coffee', 'tarot', 'runes' or all fetched items failed validation.");
+          console.warn("No tiles found for types 'tea', 'coffee', 'tarot', 'runes' in 'app_tiles' collection or all fetched items failed validation.");
         }
         setTiles(fetchedTilesData);
 
