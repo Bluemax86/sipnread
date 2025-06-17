@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import { app as firebaseApp, db } from '@/lib/firebase';
 import type { SaveReadingDataCallableInput, ReadingType } from '@/../functions/src';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 
 
 export default function GetReadingPage() {
@@ -46,22 +46,28 @@ export default function GetReadingPage() {
     const fetchAudioTracks = async () => {
       setIsAudioConfigLoading(true);
       try {
-        const q = query(collection(db, 'audioTracks'), where('playOn', '==', 'generating'));
-        const querySnapshot = await getDocs(q);
-        const urls: string[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.audioURL && typeof data.audioURL === 'string') {
-            urls.push(data.audioURL);
+        const docRef = doc(db, 'audioTracks', 'generating');
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.audioURLs && Array.isArray(data.audioURLs) && data.audioURLs.length > 0) {
+            const urls = data.audioURLs.filter((url: unknown): url is string => typeof url === 'string' && url.trim() !== '');
+            setGeneratingAudioUrls(urls);
+            if (urls.length > 0) {
+              const randomIndex = Math.floor(Math.random() * urls.length);
+              setSelectedAudioUrl(urls[randomIndex]);
+            } else {
+              setSelectedAudioUrl(null);
+              console.warn("AudioTracks 'generating' document: 'audioURLs' array is empty or contains invalid URLs.");
+            }
+          } else {
+            setSelectedAudioUrl(null);
+            console.warn("AudioTracks 'generating' document: 'audioURLs' field is missing, not an array, or empty.");
           }
-        });
-        setGeneratingAudioUrls(urls);
-        if (urls.length > 0) {
-          const randomIndex = Math.floor(Math.random() * urls.length);
-          setSelectedAudioUrl(urls[randomIndex]);
         } else {
           setSelectedAudioUrl(null);
-          console.warn("No audio tracks found for 'generating' state.");
+          console.warn("AudioTracks document with ID 'generating' not found.");
         }
       } catch (error) {
         console.error("Error fetching 'generating' audio tracks:", error);
@@ -211,7 +217,7 @@ export default function GetReadingPage() {
       
       const processingEndTime = Date.now();
       const musicStartedAt = musicStartTimeRef.current;
-      const elapsedTimeMs = musicStartedAt ? processingEndTime - musicStartedAt : Infinity; // If no music, no delay.
+      const elapsedTimeMs = musicStartedAt ? processingEndTime - musicStartedAt : Infinity; 
       const minDisplayTimeMs = 10000; // 10 seconds
 
       if (musicStartedAt && elapsedTimeMs < minDisplayTimeMs) {
