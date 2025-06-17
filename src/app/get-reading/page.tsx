@@ -25,6 +25,7 @@ export default function GetReadingPage() {
   // selectedReadingTypeForDisplay is for UI only, not for critical data path.
   const [selectedReadingTypeForDisplay, setSelectedReadingTypeForDisplay] = useState<string | null>(null);
 
+  const loadingAudioRef = useRef<HTMLAudioElement | null>(null);
   const overallLoading = isLoadingAI || isSavingReading;
 
   useEffect(() => {
@@ -40,6 +41,20 @@ export default function GetReadingPage() {
     }
   }, [overallLoading]);
 
+  // Cleanup audio when component unmounts
+  useEffect(() => {
+    const audioPlayer = loadingAudioRef.current;
+    return () => {
+      if (audioPlayer) {
+        audioPlayer.pause();
+        audioPlayer.currentTime = 0;
+        // Detach src to prevent potential background loading or errors after unmount
+        // audioPlayer.src = ''; // This might not be necessary and can sometimes cause issues if audio element is reused
+      }
+    };
+  }, []);
+
+
   const handleInterpretation = async (imageStorageUrls: string[], question?: string, userSymbolNames?: string[]) => {
     if (!user) {
       setResult({ error: "You must be logged in to get a reading." });
@@ -51,11 +66,20 @@ export default function GetReadingPage() {
     setResult(null);
     localStorage.removeItem('teaLeafReadingResult');
 
-    const currentReadingTypeFromStorage = typeof window !== 'undefined' ? localStorage.getItem('selectedReadingType') : null;
+    const audioPlayStartTime = Date.now();
+    if (loadingAudioRef.current) {
+      loadingAudioRef.current.currentTime = 0; // Reset audio
+      loadingAudioRef.current.play().catch(error => console.warn("Audio play failed:", error));
+    }
+    
+    let aiAnalysisResponse: FullInterpretationResult | null = null;
+    let saveSucceeded = false;
+    let finalReadingId: string | undefined;
+    let errorForState: string | undefined;
 
     try {
-      // Step 1: Get AI Analysis
-      const aiAnalysisResponse = await getTeaLeafAiAnalysisAction(
+      const currentReadingTypeFromStorage = typeof window !== 'undefined' ? localStorage.getItem('selectedReadingType') : null;
+      aiAnalysisResponse = await getTeaLeafAiAnalysisAction(
         user.uid,
         imageStorageUrls,
         question,
@@ -64,71 +88,98 @@ export default function GetReadingPage() {
       );
 
       if (aiAnalysisResponse.error || !aiAnalysisResponse.aiInterpretation) {
-        setResult({ error: aiAnalysisResponse.error || "Failed to get AI interpretation." });
-        setIsLoadingAI(false);
-        return;
-      }
-      setIsLoadingAI(false);
-
-      // Step 2: Save the reading data (including AI results) via Callable Function
-      setIsSavingReading(true);
-      const functions = getFunctions(firebaseApp);
-      const saveReadingData = httpsCallable<SaveReadingDataCallableInput, { success: boolean; readingId?: string; message?: string }>(functions, 'saveReadingDataCallable');
-      
-      // Re-fetch readingType from localStorage directly before creating payload for saving
-      const readingTypeForSave = typeof window !== 'undefined' ? localStorage.getItem('selectedReadingType') : null;
-      let finalReadingTypeForPayload: ReadingType | null | undefined;
-
-      const validReadingTypes: ReadingType[] = ['tea', 'coffee', 'tarot', 'runes'];
-
-      if (readingTypeForSave && validReadingTypes.includes(readingTypeForSave as ReadingType)) {
-          finalReadingTypeForPayload = readingTypeForSave as ReadingType;
-      } else if (readingTypeForSave === null) {
-          finalReadingTypeForPayload = null;
+        errorForState = aiAnalysisResponse.error || "Failed to get AI interpretation.";
+        // No throw here, will be handled in finally
       } else {
-          // If localStorage value is something unexpected (e.g., an old invalid value, or undefined string)
-          // default to undefined, so the Zod schema on the backend handles it as optional.
-          finalReadingTypeForPayload = undefined;
-          if (readingTypeForSave !== null && readingTypeForSave !== undefined) {
-            console.warn(`[GetReadingPage] Unexpected readingType ('${readingTypeForSave}') from localStorage during save. Defaulting to undefined.`);
-          }
-      }
+        // AI Analysis done, now proceed to saving
+        // Keep isLoadingAI true for UI, but mark internal AI processing as done for logic
+        // setIsLoadingAI(false); // This will be set false after audio delay logic in finally
+        setIsSavingReading(true); // Now indicate saving
 
-      const saveDataPayload: SaveReadingDataCallableInput = {
-        imageStorageUrls: aiAnalysisResponse.imageStorageUrls || imageStorageUrls,
-        aiSymbolsDetected: aiAnalysisResponse.aiSymbolsDetected || [],
-        aiInterpretation: aiAnalysisResponse.aiInterpretation,
-        userQuestion: aiAnalysisResponse.userQuestion || null,
-        userSymbolNames: aiAnalysisResponse.userSymbolNames || null,
-        readingType: finalReadingTypeForPayload,
+        const functions = getFunctions(firebaseApp);
+        const saveReadingData = httpsCallable<SaveReadingDataCallableInput, { success: boolean; readingId?: string; message?: string }>(functions, 'saveReadingDataCallable');
+        
+        const readingTypeForSave = typeof window !== 'undefined' ? localStorage.getItem('selectedReadingType') : null;
+        let finalReadingTypeForPayload: ReadingType | null | undefined;
+        const validReadingTypes: ReadingType[] = ['tea', 'coffee', 'tarot', 'runes'];
+
+        if (readingTypeForSave && validReadingTypes.includes(readingTypeForSave as ReadingType)) {
+            finalReadingTypeForPayload = readingTypeForSave as ReadingType;
+        } else if (readingTypeForSave === null) {
+            finalReadingTypeForPayload = null;
+        } else {
+            finalReadingTypeForPayload = undefined;
+            if (readingTypeForSave !== null && readingTypeForSave !== undefined) {
+              console.warn(`[GetReadingPage] Unexpected readingType ('${readingTypeForSave}') from localStorage during save. Defaulting to undefined.`);
+            }
+        }
+
+        const saveDataPayload: SaveReadingDataCallableInput = {
+          imageStorageUrls: aiAnalysisResponse.imageStorageUrls || imageStorageUrls,
+          aiSymbolsDetected: aiAnalysisResponse.aiSymbolsDetected || [],
+          aiInterpretation: aiAnalysisResponse.aiInterpretation,
+          userQuestion: aiAnalysisResponse.userQuestion || null,
+          userSymbolNames: aiAnalysisResponse.userSymbolNames || null,
+          readingType: finalReadingTypeForPayload,
+        };
+
+        const saveResult: HttpsCallableResult<{ success: boolean; readingId?: string; message?: string }> = await saveReadingData(saveDataPayload);
+
+        if (saveResult.data.success && saveResult.data.readingId) {
+          saveSucceeded = true;
+          finalReadingId = saveResult.data.readingId;
+        } else {
+          errorForState = saveResult.data.message || 'Failed to save reading data.';
+        }
+      }
+    } catch (e: unknown) { // Catch errors from AI action or save callable
+      console.error("Error during interpretation or saving process:", e);
+      if (!errorForState) { // If error wasn't already set by a non-throwing failure path
+         errorForState = e instanceof Error ? e.message : 'An unexpected error occurred.';
+      }
+    } finally {
+      const processingActuallyFinished = !errorForState && saveSucceeded;
+      const processingEndTime = Date.now();
+      const audioPlayedDuration = processingEndTime - audioPlayStartTime;
+      const minAudioDuration = 15000; // 15 seconds
+      
+      // Only delay if processing was successful AND audio hasn't played for 15s yet
+      const delayNeeded = processingActuallyFinished ? Math.max(0, minAudioDuration - audioPlayedDuration) : 0;
+
+      const performFinalActions = () => {
+        if (loadingAudioRef.current) {
+          loadingAudioRef.current.pause();
+          loadingAudioRef.current.currentTime = 0;
+        }
+        
+        setIsLoadingAI(false);
+        setIsSavingReading(false);
+
+        if (processingActuallyFinished && aiAnalysisResponse && finalReadingId) {
+          const finalResultForState: FullInterpretationResult = {
+            ...aiAnalysisResponse,
+            readingType: aiAnalysisResponse.readingType,
+            readingId: finalReadingId,
+            error: undefined,
+          };
+          setResult(finalResultForState);
+          localStorage.setItem('teaLeafReadingResult', JSON.stringify(finalResultForState));
+        } else {
+          setResult({ 
+            ...(aiAnalysisResponse || {}),
+            error: errorForState || "An unknown error occurred after processing." 
+          });
+        }
       };
 
-      const saveResult: HttpsCallableResult<{ success: boolean; readingId?: string; message?: string }> = await saveReadingData(saveDataPayload);
-
-      if (saveResult.data.success && saveResult.data.readingId) {
-        const finalResult: FullInterpretationResult = {
-          ...aiAnalysisResponse,
-          // Ensure readingType in the final result shown to user also reflects what was attempted to be saved
-          readingType: finalReadingTypeForPayload !== undefined ? finalReadingTypeForPayload : (aiAnalysisResponse.readingType || null),
-          readingId: saveResult.data.readingId,
-          error: undefined,
-        };
-        setResult(finalResult);
-        localStorage.setItem('teaLeafReadingResult', JSON.stringify(finalResult));
+      if (delayNeeded > 0) {
+        // If we need to delay, the loading spinner (Brain icon via isLoadingAI) should remain.
+        // `isLoadingAI` is still true at this point. `isSavingReading` might be true.
+        // The `overallLoading` will keep the spinner container visible.
+        setTimeout(performFinalActions, delayNeeded);
       } else {
-        setResult({
-            ...aiAnalysisResponse,
-            readingType: finalReadingTypeForPayload !== undefined ? finalReadingTypeForPayload : (aiAnalysisResponse.readingType || null),
-            error: saveResult.data.message || 'Failed to save reading data.'
-        });
+        performFinalActions();
       }
-    } catch (error: unknown) {
-      console.error("Error during interpretation or saving process:", error);
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
-      setResult({ error: errorMessage });
-    } finally {
-      setIsLoadingAI(false);
-      setIsSavingReading(false);
     }
   };
 
@@ -143,6 +194,7 @@ export default function GetReadingPage() {
 
   return (
     <div className="container mx-auto min-h-screen flex flex-col items-center justify-center py-8 selection:bg-accent selection:text-accent-foreground">
+      <audio ref={loadingAudioRef} src="/audio/reading_music.MP3" />
       <header className="text-center mb-10">
         <Wand2 className="mx-auto h-16 w-16 text-primary mb-4" />
         <h1 className="text-5xl md:text-6xl font-headline text-primary mb-3 tracking-tight">Read Your Leaves</h1>
@@ -185,7 +237,7 @@ export default function GetReadingPage() {
                   <p className="ml-4 text-lg mt-4 text-muted-foreground">AI is interpreting your leaves...</p>
                 </>
               )}
-              {isSavingReading && (
+              {isSavingReading && !isLoadingAI && (
                 <>
                   <Database className="h-12 w-12 animate-pulse text-primary" />
                   <p className="ml-4 text-lg mt-4 text-muted-foreground">Saving your reading...</p>
@@ -232,5 +284,3 @@ export default function GetReadingPage() {
     </div>
   );
 }
-
-    
