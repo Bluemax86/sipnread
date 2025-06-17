@@ -12,7 +12,7 @@ import { Loader2, AlertCircle, ImageOff } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface TileInfo {
-  id: string; // Firestore document ID (e.g., "tea", "Coffee") - keeps original casing for keys
+  id: string; // Firestore document ID (e.g., "tea", "coffee")
   imageURL: string;
   imageAlt: string;
   aiHint: string;
@@ -39,15 +39,22 @@ export default function GatewayPage() {
           collection(db, 'appTiles'),
           orderBy('position', 'asc')
         );
+
+        console.log("[GatewayPage] Fetching tiles from Firestore collection: 'appTiles', ordered by 'position ASC'");
         const querySnapshot = await getDocs(tilesQuery);
         
+        console.log(`[GatewayPage] Firestore querySnapshot received. Number of documents: ${querySnapshot.docs.length}`);
+        querySnapshot.docs.forEach((doc, index) => {
+          console.log(`[GatewayPage] Raw Document ${index + 1} - ID: ${doc.id}, Data:`, JSON.parse(JSON.stringify(doc.data())));
+        });
+
         const fetchedTilesData = querySnapshot.docs.map(doc => {
           const data = doc.data();
-          const docId = doc.id; // Original casing, e.g., "Coffee" or "coffee"
-          const lowercasedDocId = docId.toLowerCase(); // Canonical form, e.g., "coffee"
+          const docId = doc.id; 
+          const lowercasedDocId = docId.toLowerCase();
 
           if (!VALID_READING_TYPES.includes(lowercasedDocId as TileInfo['readingMethodType'])) {
-            console.warn(`Skipping tile. Original ID: "${docId}", Lowercased: "${lowercasedDocId}". Not in VALID_READING_TYPES: ${VALID_READING_TYPES.join(', ')}.`);
+            console.warn(`[GatewayPage] Filtering out tile. Original ID: "${docId}", Lowercased: "${lowercasedDocId}". Not in VALID_READING_TYPES: ${VALID_READING_TYPES.join(', ')}.`);
             return null;
           }
           const readingMethodType = lowercasedDocId as TileInfo['readingMethodType'];
@@ -59,13 +66,13 @@ export default function GatewayPage() {
           const hint = typeof data.aiHint === 'string' && data.aiHint.trim() !== '' 
                         ? data.aiHint 
                         : readingMethodType;
-
+          
           const path = typeof data.targetPath === 'string' && data.targetPath.startsWith('/')
                         ? data.targetPath
                         : '/get-reading';
 
           return {
-            id: docId, // Use original docId for React key
+            id: docId, 
             imageURL: data.tileURL && typeof data.tileURL === 'string' 
                         ? data.tileURL 
                         : 'https://placehold.co/300x450.png?text=Image+Not+Found',
@@ -73,20 +80,20 @@ export default function GatewayPage() {
             aiHint: hint,
             active: typeof data.active === 'boolean' ? data.active : false,
             targetPath: path,
-            readingMethodType: readingMethodType, // Consistently lowercase
+            readingMethodType: readingMethodType,
             position: typeof data.position === 'number' ? data.position : 0,
           } as TileInfo;
         }).filter(Boolean) as TileInfo[];
         
         if (fetchedTilesData.length === 0 && querySnapshot.docs.length > 0) {
-          console.warn("All fetched items from 'appTiles' were filtered out. Check document IDs and `VALID_READING_TYPES` alignment.");
+          console.warn("[GatewayPage] All fetched items from 'appTiles' were filtered out after mapping. Check document IDs, `VALID_READING_TYPES` alignment, or mapping logic.");
         } else if (querySnapshot.docs.length === 0) {
-          console.warn("No documents found in 'appTiles' collection matching the query.");
+          console.warn("[GatewayPage] No documents found in 'appTiles' collection matching the query.");
         }
         setTiles(fetchedTilesData);
 
       } catch (err) {
-        console.error("Error fetching divination tiles from 'appTiles':", err);
+        console.error("[GatewayPage] Error fetching divination tiles from 'appTiles':", err);
         setError(err instanceof Error ? err.message : "Failed to load divination choices.");
       } finally {
         setIsLoading(false);
@@ -98,7 +105,7 @@ export default function GatewayPage() {
   const handleTileClick = (tile: TileInfo) => {
     if (tile.active && tile.targetPath) {
       if (typeof window !== 'undefined') {
-        localStorage.setItem('selectedReadingType', tile.readingMethodType); // readingMethodType is lowercase
+        localStorage.setItem('selectedReadingType', tile.readingMethodType);
       }
       router.push(tile.targetPath);
     }
