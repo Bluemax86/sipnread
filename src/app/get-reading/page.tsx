@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import { app as firebaseApp, db } from '@/lib/firebase';
 import type { SaveReadingDataCallableInput, ReadingType } from '@/../functions/src';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore'; // Import doc and getDoc
 
 
 export default function GetReadingPage() {
@@ -28,7 +28,7 @@ export default function GetReadingPage() {
 
   const loadingAudioRef = useRef<HTMLAudioElement | null>(null);
   const musicStartTimeRef = useRef<number | null>(null);
-  
+
   const [generatingAudioUrls, setGeneratingAudioUrls] = useState<string[]>([]);
   const [selectedAudioUrl, setSelectedAudioUrl] = useState<string | null>(null);
   const [isAudioConfigLoading, setIsAudioConfigLoading] = useState(true);
@@ -46,23 +46,27 @@ export default function GetReadingPage() {
     const fetchAudioTracks = async () => {
       setIsAudioConfigLoading(true);
       try {
-        const q = query(collection(db, 'audioTracks'), where('playOn', '==', 'generating'));
-        const querySnapshot = await getDocs(q);
-        const urls: string[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.audioURL && typeof data.audioURL === 'string' && data.audioURL.trim() !== '') {
-            urls.push(data.audioURL);
-          }
-        });
+        const generatingDocRef = doc(db, 'audioTracks', 'generating');
+        const generatingDocSnap = await getDoc(generatingDocRef);
 
-        setGeneratingAudioUrls(urls);
-        if (urls.length > 0) {
-          const randomIndex = Math.floor(Math.random() * urls.length);
-          setSelectedAudioUrl(urls[randomIndex]);
+        if (generatingDocSnap.exists()) {
+          const data = generatingDocSnap.data();
+          if (data.audioURLs && Array.isArray(data.audioURLs) && data.audioURLs.every(url => typeof url === 'string' && url.trim() !== '')) {
+            setGeneratingAudioUrls(data.audioURLs);
+            if (data.audioURLs.length > 0) {
+              const randomIndex = Math.floor(Math.random() * data.audioURLs.length);
+              setSelectedAudioUrl(data.audioURLs[randomIndex]);
+            } else {
+              setSelectedAudioUrl(null);
+              console.warn("Audio document 'generating' has an empty 'audioURLs' array.");
+            }
+          } else {
+            setSelectedAudioUrl(null);
+            console.warn("Audio document 'generating' is missing 'audioURLs' array or it's malformed.");
+          }
         } else {
           setSelectedAudioUrl(null);
-          console.warn("No 'generating' audio tracks found or 'audioURL' field missing/invalid in 'audioTracks' collection.");
+          console.warn("Audio document 'generating' not found in 'audioTracks' collection.");
         }
       } catch (error) {
         console.error("Error fetching 'generating' audio tracks:", error);
@@ -100,27 +104,27 @@ export default function GetReadingPage() {
     }
 
     setIsLoadingAI(true);
-    setIsSavingReading(false); 
+    setIsSavingReading(false);
     setResult(null);
     localStorage.removeItem('teaLeafReadingResult');
 
     if (loadingAudioRef.current && selectedAudioUrl) {
         if(loadingAudioRef.current.src !== selectedAudioUrl) {
             loadingAudioRef.current.src = selectedAudioUrl;
-            loadingAudioRef.current.load(); 
+            loadingAudioRef.current.load();
         }
-      loadingAudioRef.current.currentTime = 0; 
-      loadingAudioRef.current.volume = 1; 
+      loadingAudioRef.current.currentTime = 0;
+      loadingAudioRef.current.volume = 1;
       loadingAudioRef.current.loop = false; // Ensure loop is false
       loadingAudioRef.current.play().catch(error => console.warn("Audio play failed:", error));
-      musicStartTimeRef.current = Date.now(); 
+      musicStartTimeRef.current = Date.now();
     } else if (!selectedAudioUrl) {
         console.warn("No audio track selected or available to play during AI processing.");
-        musicStartTimeRef.current = null; 
+        musicStartTimeRef.current = null;
     } else {
-        musicStartTimeRef.current = Date.now(); 
+        musicStartTimeRef.current = Date.now();
     }
-    
+
     let aiAnalysisResponse: FullInterpretationResult | null = null;
     let saveSucceeded = false;
     let finalReadingId: string | undefined;
@@ -139,27 +143,27 @@ export default function GetReadingPage() {
       if (aiAnalysisResponse.error || !aiAnalysisResponse.aiInterpretation) {
         errorForState = aiAnalysisResponse.error || "Failed to get AI interpretation.";
       } else {
-        setIsLoadingAI(false); 
-        setIsSavingReading(true); 
+        setIsLoadingAI(false);
+        setIsSavingReading(true);
 
         const functions = getFunctions(firebaseApp);
         const saveReadingData = httpsCallable<SaveReadingDataCallableInput, { success: boolean; readingId?: string; message?: string }>(functions, 'saveReadingDataCallable');
-        
+
         const readingTypeForSave = typeof window !== 'undefined' ? localStorage.getItem('selectedReadingType') : null;
         let finalReadingTypeForPayload: ReadingType | null | undefined;
         const validReadingTypes: ReadingType[] = ['tea', 'coffee', 'tarot', 'runes'];
 
         if (readingTypeForSave && validReadingTypes.includes(readingTypeForSave as ReadingType)) {
             finalReadingTypeForPayload = readingTypeForSave as ReadingType;
-        } else if (readingTypeForSave === null) { 
+        } else if (readingTypeForSave === null) {
             finalReadingTypeForPayload = null;
         } else {
-            finalReadingTypeForPayload = undefined; 
+            finalReadingTypeForPayload = undefined;
              if (readingTypeForSave !== null && readingTypeForSave !== undefined) {
               console.warn(`[GetReadingPage] Unexpected readingType ('${readingTypeForSave}') from localStorage during save. Defaulting to undefined for payload.`);
             }
         }
-        
+
         const saveDataPayload: SaveReadingDataCallableInput = {
           imageStorageUrls: aiAnalysisResponse.imageStorageUrls || imageStorageUrls,
           aiSymbolsDetected: aiAnalysisResponse.aiSymbolsDetected || [],
@@ -178,20 +182,19 @@ export default function GetReadingPage() {
           errorForState = saveResult.data.message || 'Failed to save reading data.';
         }
       }
-    } catch (e: unknown) { 
+    } catch (e: unknown) {
       console.error("Error during interpretation or saving process:", e);
-      if (!errorForState) { 
+      if (!errorForState) {
          errorForState = e instanceof Error ? e.message : 'An unexpected error occurred.';
       }
     } finally {
       const performFinalActions = () => {
         // No need to pause audio here as it's 10s long and plays once.
-        // If audioRef.current exists and you want to be explicit about stopping it on early exit:
         // if (loadingAudioRef.current) {
         //   loadingAudioRef.current.pause();
         //   loadingAudioRef.current.currentTime = 0;
         // }
-        
+
         setIsLoadingAI(false);
         setIsSavingReading(false);
 
@@ -205,18 +208,18 @@ export default function GetReadingPage() {
           setResult(finalResultForState);
           localStorage.setItem('teaLeafReadingResult', JSON.stringify(finalResultForState));
         } else {
-          setResult({ 
+          setResult({
             ...(aiAnalysisResponse || {}),
             readingType: aiAnalysisResponse?.readingType,
-            error: errorForState || "An unknown error occurred after processing." 
+            error: errorForState || "An unknown error occurred after processing."
           });
         }
       };
-      
+
       const processingEndTime = Date.now();
       const musicStartedAt = musicStartTimeRef.current;
-      const elapsedTimeMs = musicStartedAt ? processingEndTime - musicStartedAt : Infinity; 
-      const minDisplayTimeMs = 10000; 
+      const elapsedTimeMs = musicStartedAt ? processingEndTime - musicStartedAt : Infinity;
+      const minDisplayTimeMs = 10000;
 
       if (musicStartedAt && elapsedTimeMs < minDisplayTimeMs) {
         const delayMs = minDisplayTimeMs - elapsedTimeMs;
@@ -242,7 +245,7 @@ export default function GetReadingPage() {
     <div className="container mx-auto min-h-screen flex flex-col items-center justify-center py-8 selection:bg-accent selection:text-accent-foreground">
       <audio
         ref={loadingAudioRef}
-        key={selectedAudioUrl} 
+        key={selectedAudioUrl}
         // No loop attribute
       />
       <header className="text-center mb-10">
@@ -287,7 +290,7 @@ export default function GetReadingPage() {
                   <p className="ml-4 text-lg mt-4 text-muted-foreground">AI is interpreting your leaves...</p>
                 </>
               )}
-              {isSavingReading && !isLoadingAI && ( 
+              {isSavingReading && !isLoadingAI && (
                 <>
                   <Database className="h-12 w-12 animate-pulse text-primary" />
                   <p className="ml-4 text-lg mt-4 text-muted-foreground">Saving your reading...</p>

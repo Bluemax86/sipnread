@@ -22,11 +22,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
 import { app as firebaseApp, db } from '@/lib/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore'; // Import doc and getDoc
 import type { SubmitRoxyReadingRequestCallableInput } from '@/../functions/src';
 
 interface StoredReadingResult extends AiAnalysisResult {
-  readingId?: string; 
+  readingId?: string;
 }
 
 export default function ReadingPage() {
@@ -65,23 +65,27 @@ export default function ReadingPage() {
     const fetchAudioTracks = async () => {
       setIsAudioConfigLoading(true);
       try {
-        const q = query(collection(db, 'audioTracks'), where('playOn', '==', 'reading'));
-        const querySnapshot = await getDocs(q);
-        const urls: string[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.audioURL && typeof data.audioURL === 'string' && data.audioURL.trim() !== '') {
-            urls.push(data.audioURL);
+        const readingDocRef = doc(db, 'audioTracks', 'reading');
+        const readingDocSnap = await getDoc(readingDocRef);
+
+        if (readingDocSnap.exists()) {
+          const data = readingDocSnap.data();
+          if (data.audioURLs && Array.isArray(data.audioURLs) && data.audioURLs.every(url => typeof url === 'string' && url.trim() !== '')) {
+            setReadingAudioUrls(data.audioURLs);
+            if (data.audioURLs.length > 0) {
+              const randomIndex = Math.floor(Math.random() * data.audioURLs.length);
+              setSelectedReadingAudioUrl(data.audioURLs[randomIndex]);
+            } else {
+              setSelectedReadingAudioUrl(null);
+              console.warn("Audio document 'reading' has an empty 'audioURLs' array.");
+            }
+          } else {
+            setSelectedReadingAudioUrl(null);
+            console.warn("Audio document 'reading' is missing 'audioURLs' array or it's malformed.");
           }
-        });
-        
-        setReadingAudioUrls(urls);
-        if (urls.length > 0) {
-          const randomIndex = Math.floor(Math.random() * urls.length);
-          setSelectedReadingAudioUrl(urls[randomIndex]);
         } else {
           setSelectedReadingAudioUrl(null);
-          console.warn("No 'reading' audio tracks found or 'audioURL' field missing/invalid in 'audioTracks' collection.");
+          console.warn("Audio document 'reading' not found in 'audioTracks' collection.");
         }
       } catch (error) {
         console.error("Error fetching 'reading' audio tracks:", error);
@@ -161,7 +165,7 @@ export default function ReadingPage() {
       const result: HttpsCallableResult<{ success: boolean; requestId?: string; message?: string }> = await submitRoxyReadingRequest(payload);
 
       if (result.data.success && result.data.requestId) {
-        setShowRoxyDialog(true); 
+        setShowRoxyDialog(true);
       } else {
         toast({
           variant: "destructive",
@@ -213,7 +217,7 @@ export default function ReadingPage() {
       </div>
     );
   }
-  
+
   return (
     <div className="container mx-auto min-h-screen flex flex-col items-center py-8 selection:bg-accent selection:text-accent-foreground">
       <audio ref={backgroundAudioRef} src={selectedReadingAudioUrl || undefined} loop key={selectedReadingAudioUrl} />
@@ -273,14 +277,14 @@ export default function ReadingPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-card-foreground leading-relaxed">
-                Our renowned in-house tassologist, Roxy O&apos;Reilly, offers bespoke interpretations. 
-                For just $25, Roxy will personally analyze your tea leaves and provide a detailed, 
+                Our renowned in-house tassologist, Roxy O&apos;Reilly, offers bespoke interpretations.
+                For just $25, Roxy will personally analyze your tea leaves and provide a detailed,
                 intuitive reading tailored to you.
               </p>
-              <Button 
-                onClick={handleRequestRoxyReading} 
+              <Button
+                onClick={handleRequestRoxyReading}
                 disabled={isSubmittingRoxyRequest}
-                variant="default" 
+                variant="default"
                 className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
               >
                 {isSubmittingRoxyRequest ? (
@@ -303,16 +307,16 @@ export default function ReadingPage() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Thank You for Your Request!</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Your request for a personalized reading from Roxy O&apos;Reilly has been received. 
-                  Roxy will meticulously prepare your reading, and you&apos;ll receive an email 
-                  with the details within 1-2 business days. We&apos;ll notify you at the 
+                  Your request for a personalized reading from Roxy O&apos;Reilly has been received.
+                  Roxy will meticulously prepare your reading, and you&apos;ll receive an email
+                  with the details within 1-2 business days. We&apos;ll notify you at the
                   email address associated with your account.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogAction onClick={() => {
                   setShowRoxyDialog(false);
-                  router.push('/'); 
+                  router.push('/');
                 }}>
                   OK
                 </AlertDialogAction>
