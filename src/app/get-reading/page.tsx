@@ -280,18 +280,13 @@ export default function GetReadingPage() {
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                   <Button onClick={() => router.push('/login')} className="w-full sm:w-auto">
-                    <LogIn className="mr-2 h-4 w-4" /> Sign In
+                    <LogIn className="mr-2 h-4 w-4" /> Log In
                   </Button>
                   <Button onClick={() => router.push('/signup')} variant="secondary" className="w-full sm:w-auto">
                     <UserPlus className="mr-2 h-4 w-4" /> Create Account
                   </Button>
                 </div>
               </CardContent>
-              <CardFooter className="flex justify-center pt-4">
-                <Button variant="outline" onClick={() => setShowLoginPromptCard(false)}>
-                  <ArrowLeft className="mr-2 h-4 w-4" /> Back to Form
-                </Button>
-              </CardFooter>
             </Card>
           </div>
         ) : (
