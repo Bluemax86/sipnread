@@ -7,12 +7,12 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/firebase';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { Loader2, AlertCircle, ImageOff } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface TileInfo {
-  id: string; // Firestore document ID
+  id: string; // Firestore document ID (e.g., "tea", "coffee") which also serves as readingMethodType
   imageURL: string;
   imageAlt: string;
   aiHint: string;
@@ -33,40 +33,42 @@ export default function GatewayPage() {
       setIsLoading(true);
       setError(null);
       try {
-        const validReadingTypes: TileInfo['readingMethodType'][] = ['tea', 'coffee', 'tarot', 'runes'];
         const tilesQuery = query(
-          collection(db, 'app_tiles'),
-          where('type', 'in', validReadingTypes),
+          collection(db, 'appTiles'), // Changed collection name
           orderBy('position', 'asc')
         );
         const querySnapshot = await getDocs(tilesQuery);
+        
+        const validReadingTypes: TileInfo['readingMethodType'][] = ['tea', 'coffee', 'tarot', 'runes'];
+
         const fetchedTilesData = querySnapshot.docs.map(doc => {
           const data = doc.data();
-          const typeFromData = data.type as TileInfo['readingMethodType'];
-          
-          const readingMethodType = validReadingTypes.includes(typeFromData)
-                                   ? typeFromData
-                                   : 'tea'; // Default to 'tea' if data.type is somehow invalid
+          const docId = doc.id as TileInfo['readingMethodType'];
+
+          if (!validReadingTypes.includes(docId)) {
+            console.warn(`Skipping tile with invalid id/type: ${docId} from 'appTiles' collection.`);
+            return null;
+          }
 
           return {
-            id: doc.id,
+            id: docId,
             imageURL: data.tileURL || 'https://placehold.co/300x450.png?text=Image+Not+Found',
-            imageAlt: data.imageAlt || `${readingMethodType.charAt(0).toUpperCase() + readingMethodType.slice(1)} Tile`,
-            aiHint: data.aiHint || readingMethodType,
-            active: data.status === 'active',
-            targetPath: data.targetPath || '/get-reading',
-            readingMethodType: readingMethodType,
+            imageAlt: `${docId.charAt(0).toUpperCase() + docId.slice(1)} Reading Tile`,
+            aiHint: docId,
+            active: typeof data.active === 'boolean' ? data.active : false,
+            targetPath: '/get-reading', // All tiles lead to get-reading page
+            readingMethodType: docId,
             position: typeof data.position === 'number' ? data.position : 0,
           } as TileInfo;
-        });
+        }).filter(Boolean) as TileInfo[]; // filter(Boolean) removes any null entries from validation
         
         if (fetchedTilesData.length === 0) {
-          console.warn("No tiles found for types 'tea', 'coffee', 'tarot', 'runes' in 'app_tiles' collection or all fetched items failed validation.");
+          console.warn("No valid tiles found in 'appTiles' collection or all fetched items failed validation.");
         }
         setTiles(fetchedTilesData);
 
       } catch (err) {
-        console.error("Error fetching divination tiles:", err);
+        console.error("Error fetching divination tiles from 'appTiles':", err);
         setError(err instanceof Error ? err.message : "Failed to load divination choices.");
       } finally {
         setIsLoading(false);
