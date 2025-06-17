@@ -11,8 +11,9 @@ import { Loader2, AlertCircle, Send, CheckCircle, Wand2, UserX, Brain, Database 
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
-import { app as firebaseApp } from '@/lib/firebase';
+import { app as firebaseApp, db } from '@/lib/firebase';
 import type { SaveReadingDataCallableInput, ReadingType } from '@/../functions/src';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 
 export default function GetReadingPage() {
@@ -26,7 +27,11 @@ export default function GetReadingPage() {
   const [selectedReadingTypeForDisplay, setSelectedReadingTypeForDisplay] = useState<string | null>(null);
 
   const loadingAudioRef = useRef<HTMLAudioElement | null>(null);
-  const fadeOutIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const [generatingAudioUrls, setGeneratingAudioUrls] = useState<string[]>([]);
+  const [selectedAudioUrl, setSelectedAudioUrl] = useState<string | null>(null);
+  const [isAudioConfigLoading, setIsAudioConfigLoading] = useState(true);
+
   const overallLoading = isLoadingAI || isSavingReading;
 
   useEffect(() => {
@@ -37,6 +42,38 @@ export default function GetReadingPage() {
   }, []);
 
   useEffect(() => {
+    const fetchAudioTracks = async () => {
+      setIsAudioConfigLoading(true);
+      try {
+        const q = query(collection(db, 'audioTracks'), where('playOn', '==', 'generating'));
+        const querySnapshot = await getDocs(q);
+        const urls: string[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.audioURL && typeof data.audioURL === 'string') {
+            urls.push(data.audioURL);
+          }
+        });
+        setGeneratingAudioUrls(urls);
+        if (urls.length > 0) {
+          const randomIndex = Math.floor(Math.random() * urls.length);
+          setSelectedAudioUrl(urls[randomIndex]);
+        } else {
+          setSelectedAudioUrl(null);
+          console.warn("No audio tracks found for 'generating' state.");
+        }
+      } catch (error) {
+        console.error("Error fetching 'generating' audio tracks:", error);
+        setSelectedAudioUrl(null);
+      } finally {
+        setIsAudioConfigLoading(false);
+      }
+    };
+    fetchAudioTracks();
+  }, []);
+
+
+  useEffect(() => {
     if (overallLoading && transitionContainerRef.current) {
       transitionContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -44,48 +81,13 @@ export default function GetReadingPage() {
 
   useEffect(() => {
     const audioPlayer = loadingAudioRef.current;
-    const fadeInterval = fadeOutIntervalRef.current;
     return () => {
       if (audioPlayer) {
         audioPlayer.pause();
         audioPlayer.currentTime = 0;
       }
-      if (fadeInterval) {
-        clearInterval(fadeInterval);
-      }
     };
   }, []);
-
-  const fadeOutAudio = (audioElement: HTMLAudioElement, duration: number = 3000): Promise<void> => {
-    return new Promise((resolve) => {
-      if (!audioElement || audioElement.paused) {
-        resolve();
-        return;
-      }
-
-      const initialVolume = audioElement.volume;
-      const steps = 50; 
-      const stepDuration = duration / steps;
-      const volumeDecrement = initialVolume / steps;
-
-      if (fadeOutIntervalRef.current) {
-        clearInterval(fadeOutIntervalRef.current);
-      }
-
-      fadeOutIntervalRef.current = setInterval(() => {
-        if (audioElement.volume > volumeDecrement) {
-          audioElement.volume -= volumeDecrement;
-        } else {
-          if (fadeOutIntervalRef.current) clearInterval(fadeOutIntervalRef.current);
-          fadeOutIntervalRef.current = null;
-          audioElement.pause();
-          audioElement.currentTime = 0;
-          audioElement.volume = initialVolume; 
-          resolve();
-        }
-      }, stepDuration);
-    });
-  };
 
 
   const handleInterpretation = async (imageStorageUrls: string[], question?: string, userSymbolNames?: string[]) => {
@@ -99,11 +101,16 @@ export default function GetReadingPage() {
     setResult(null);
     localStorage.removeItem('teaLeafReadingResult');
 
-    const audioPlayStartTime = Date.now();
-    if (loadingAudioRef.current) {
+    if (loadingAudioRef.current && selectedAudioUrl) {
+        if(loadingAudioRef.current.src !== selectedAudioUrl) {
+            loadingAudioRef.current.src = selectedAudioUrl;
+            loadingAudioRef.current.load(); // Ensure new source is loaded
+        }
       loadingAudioRef.current.currentTime = 0; 
-      loadingAudioRef.current.volume = 1; // Ensure volume is reset
+      loadingAudioRef.current.volume = 1; 
       loadingAudioRef.current.play().catch(error => console.warn("Audio play failed:", error));
+    } else if (!selectedAudioUrl) {
+        console.warn("No audio track selected or available to play during AI processing.");
     }
     
     let aiAnalysisResponse: FullInterpretationResult | null = null;
@@ -129,17 +136,16 @@ export default function GetReadingPage() {
         const functions = getFunctions(firebaseApp);
         const saveReadingData = httpsCallable<SaveReadingDataCallableInput, { success: boolean; readingId?: string; message?: string }>(functions, 'saveReadingDataCallable');
         
-        // Use a fresh read from localStorage for the save payload
         const readingTypeForSave = typeof window !== 'undefined' ? localStorage.getItem('selectedReadingType') : null;
         let finalReadingTypeForPayload: ReadingType | null | undefined;
         const validReadingTypes: ReadingType[] = ['tea', 'coffee', 'tarot', 'runes'];
 
         if (readingTypeForSave && validReadingTypes.includes(readingTypeForSave as ReadingType)) {
             finalReadingTypeForPayload = readingTypeForSave as ReadingType;
-        } else if (readingTypeForSave === null) { // Explicitly allow null if that's what's stored
+        } else if (readingTypeForSave === null) { 
             finalReadingTypeForPayload = null;
         } else {
-            finalReadingTypeForPayload = undefined; // Omit if not a valid type or not set
+            finalReadingTypeForPayload = undefined; 
              if (readingTypeForSave !== null && readingTypeForSave !== undefined) {
               console.warn(`[GetReadingPage] Unexpected readingType ('${readingTypeForSave}') from localStorage during save. Defaulting to undefined for payload.`);
             }
@@ -169,30 +175,19 @@ export default function GetReadingPage() {
          errorForState = e instanceof Error ? e.message : 'An unexpected error occurred.';
       }
     } finally {
-      const processingActuallyFinished = !errorForState && saveSucceeded;
-      const processingEndTime = Date.now();
-      const audioPlayedDuration = processingEndTime - audioPlayStartTime;
-      const minAudioDuration = 15000; 
-      const fadeDuration = 3000; // Updated fade duration
-      
-      let delayNeeded = 0;
-      if (processingActuallyFinished) {
-        // Ensure audio plays for minAudioDuration, considering the fade out will take time
-        delayNeeded = Math.max(0, minAudioDuration - (audioPlayedDuration + fadeDuration));
-      }
-      
-      const performFinalActions = async () => {
+      const performFinalActions = () => { // Removed async as fadeOutAudio is gone
         if (loadingAudioRef.current) {
-          await fadeOutAudio(loadingAudioRef.current, fadeDuration);
+          loadingAudioRef.current.pause();
+          loadingAudioRef.current.currentTime = 0;
         }
         
         setIsLoadingAI(false);
         setIsSavingReading(false);
 
-        if (processingActuallyFinished && aiAnalysisResponse && finalReadingId) {
+        if (saveSucceeded && aiAnalysisResponse && finalReadingId) {
           const finalResultForState: FullInterpretationResult = {
             ...aiAnalysisResponse,
-            readingType: aiAnalysisResponse.readingType, // Ensure readingType from AI response is carried over
+            readingType: aiAnalysisResponse.readingType,
             readingId: finalReadingId,
             error: undefined,
           };
@@ -201,32 +196,33 @@ export default function GetReadingPage() {
         } else {
           setResult({ 
             ...(aiAnalysisResponse || {}),
-            readingType: aiAnalysisResponse?.readingType, // Carry over readingType even in error cases if available
+            readingType: aiAnalysisResponse?.readingType, 
             error: errorForState || "An unknown error occurred after processing." 
           });
         }
       };
-
-      if (delayNeeded > 0) {
-        setTimeout(performFinalActions, delayNeeded);
-      } else {
-        await performFinalActions();
-      }
+      
+      performFinalActions(); // Call directly, no delay logic needed
     }
   };
 
-  if (authLoading) {
+  if (authLoading || isAudioConfigLoading) {
     return (
       <div className="container mx-auto min-h-screen flex flex-col items-center justify-center py-8">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-4 text-lg mt-4 text-muted-foreground">Loading authentication...</p>
+        <p className="ml-4 text-lg mt-4 text-muted-foreground">
+          {authLoading ? "Loading authentication..." : "Preparing mystical energies..."}
+        </p>
       </div>
     );
   }
 
   return (
     <div className="container mx-auto min-h-screen flex flex-col items-center justify-center py-8 selection:bg-accent selection:text-accent-foreground">
-      <audio ref={loadingAudioRef} src="/audio/reading_music.MP3" />
+      <audio
+        ref={loadingAudioRef}
+        key={selectedAudioUrl} 
+      />
       <header className="text-center mb-10">
         <Wand2 className="mx-auto h-16 w-16 text-primary mb-4" />
         <h1 className="text-5xl md:text-6xl font-headline text-primary mb-3 tracking-tight">Read Your Leaves</h1>
@@ -254,7 +250,7 @@ export default function GetReadingPage() {
                 !overallLoading && !result ? "opacity-100" : "opacity-0 pointer-events-none absolute inset-0"
               )}
             >
-              <ImageUploadForm onSubmit={handleInterpretation} isLoading={overallLoading} />
+              <ImageUploadForm onSubmit={handleInterpretation} isLoading={overallLoading || (!selectedAudioUrl && generatingAudioUrls.length > 0)} />
             </div>
 
             <div
@@ -317,3 +313,4 @@ export default function GetReadingPage() {
   );
 }
 
+    
