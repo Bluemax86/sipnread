@@ -53,29 +53,35 @@ export default function GatewayPage() {
           }
           const readingMethodType = lowercasedDocId as TileInfo['readingMethodType'];
           
-          const altText = (typeof data.imageAlt === 'string' && data.imageAlt.trim() !== '')
+          const imageURL = (typeof data.tileURL === 'string' && data.tileURL.trim() !== '')
+                                ? data.tileURL
+                                : `https://placehold.co/300x450.png?text=${readingMethodType.charAt(0).toUpperCase() + readingMethodType.slice(1)}`;
+
+          const imageAlt = (typeof data.imageAlt === 'string' && data.imageAlt.trim() !== '')
                                 ? data.imageAlt
                                 : `${readingMethodType.charAt(0).toUpperCase() + readingMethodType.slice(1)} Reading Tile`;
-
-          const hint = (typeof data.aiHint === 'string' && data.aiHint.trim() !== '') 
-                        ? data.aiHint 
-                        : readingMethodType;
           
-          const path = (typeof data.targetPath === 'string' && data.targetPath.startsWith('/'))
-                        ? data.targetPath
-                        : '/get-reading';
+          // aiHint is now derived from the readingMethodType (document ID)
+          const aiHint = readingMethodType;
+          
+          const active = typeof data.active === 'boolean' ? data.active : false;
+          
+          // Use target_path, default to /welcome if not specified or malformed.
+          const targetPath = (typeof data.target_path === 'string' && data.target_path.startsWith('/'))
+                                ? data.target_path
+                                : '/welcome'; 
+
+          const position = typeof data.position === 'number' ? data.position : 0;
 
           return {
             id: docId, 
-            imageURL: (data.tileURL && typeof data.tileURL === 'string') 
-                        ? data.tileURL 
-                        : 'https://placehold.co/300x450.png?text=Image+Not+Found',
-            imageAlt: altText,
-            aiHint: hint,
-            active: typeof data.active === 'boolean' ? data.active : false,
-            targetPath: path,
-            readingMethodType: readingMethodType,
-            position: typeof data.position === 'number' ? data.position : 0,
+            imageURL,
+            imageAlt,
+            aiHint,
+            active,
+            targetPath,
+            readingMethodType,
+            position,
           } as TileInfo;
         }).filter(Boolean) as TileInfo[]; 
         
@@ -101,7 +107,7 @@ export default function GatewayPage() {
       if (typeof window !== 'undefined') {
         localStorage.setItem('selectedReadingType', tile.readingMethodType);
       }
-      router.push(tile.targetPath);
+      router.push(tile.targetPath); // Uses the mapped targetPath
     }
   };
 
@@ -115,6 +121,7 @@ export default function GatewayPage() {
           height={80}
           className="mx-auto mb-4"
           data-ai-hint="logo swirl"
+          priority 
         />
         <h1 className="text-4xl md:text-5xl font-headline text-primary mb-2 tracking-tight">
           Choose Your Path
@@ -143,7 +150,7 @@ export default function GatewayPage() {
           </Alert>
         ) : (
           <div className="grid grid-cols-2 gap-6 justify-items-center">
-            {tiles.map((tile) => (
+            {tiles.map((tile, index) => (
               <Card
                 key={tile.id}
                 onClick={() => handleTileClick(tile)}
@@ -164,6 +171,7 @@ export default function GatewayPage() {
                       tile.active && 'group-hover:opacity-90 transition-opacity'
                     )}
                     unoptimized={tile.imageURL.startsWith('https://firebasestorage.googleapis.com')}
+                    priority={index === 0} // Add priority to the first tile image
                   />
                   {!tile.active && (
                     <div className="absolute inset-0 bg-black/30 flex items-center justify-center p-2">
