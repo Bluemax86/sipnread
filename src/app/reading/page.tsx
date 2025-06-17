@@ -17,11 +17,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, AlertCircle, ArrowLeft, BookOpenText, Wand2, Gem, Send, Brain, Volume2, VolumeX } from 'lucide-react'; // Added Volume2, VolumeX
+import { Loader2, AlertCircle, ArrowLeft, BookOpenText, Wand2, Gem, Send, Brain, Volume2, VolumeX } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
-import { app as firebaseApp } from '@/lib/firebase';
+import { app as firebaseApp, db } from '@/lib/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { SubmitRoxyReadingRequestCallableInput } from '@/../functions/src';
 
 interface StoredReadingResult extends AiAnalysisResult {
@@ -40,6 +41,10 @@ export default function ReadingPage() {
   const backgroundAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isMuted, setIsMuted] = useState(false);
 
+  const [readingAudioUrls, setReadingAudioUrls] = useState<string[]>([]);
+  const [selectedReadingAudioUrl, setSelectedReadingAudioUrl] = useState<string | null>(null);
+  const [isAudioConfigLoading, setIsAudioConfigLoading] = useState(true);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedResult = localStorage.getItem('teaLeafReadingResult');
@@ -57,15 +62,44 @@ export default function ReadingPage() {
   }, []);
 
   useEffect(() => {
+    const fetchAudioTracks = async () => {
+      setIsAudioConfigLoading(true);
+      try {
+        const q = query(collection(db, 'audioTracks'), where('playOn', '==', 'reading'));
+        const querySnapshot = await getDocs(q);
+        const urls: string[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.audioURL && typeof data.audioURL === 'string') {
+            urls.push(data.audioURL);
+          }
+        });
+        setReadingAudioUrls(urls);
+        if (urls.length > 0) {
+          const randomIndex = Math.floor(Math.random() * urls.length);
+          setSelectedReadingAudioUrl(urls[randomIndex]);
+        } else {
+          setSelectedReadingAudioUrl(null);
+          console.warn("No audio tracks found for 'reading' state.");
+        }
+      } catch (error) {
+        console.error("Error fetching 'reading' audio tracks:", error);
+        setSelectedReadingAudioUrl(null);
+      } finally {
+        setIsAudioConfigLoading(false);
+      }
+    };
+    fetchAudioTracks();
+  }, []);
+
+
+  useEffect(() => {
     const audio = backgroundAudioRef.current;
-    if (audio && reading && !reading.error && !isLoadingStorage) {
+    if (audio && selectedReadingAudioUrl && reading && !reading.error && !isLoadingStorage && !isAudioConfigLoading) {
       if (!isMuted) {
         audio.play().catch(error => {
           console.warn("Background audio autoplay prevented. User interaction might be needed or browser settings are blocking it.", error);
         });
-      } else {
-        // If initially muted, don't play.
-        // The `muted` property is handled by the next useEffect.
       }
     }
     // Cleanup on unmount
@@ -75,20 +109,18 @@ export default function ReadingPage() {
         audio.currentTime = 0;
       }
     };
-  }, [isMuted, reading, isLoadingStorage]);
+  }, [isMuted, reading, isLoadingStorage, selectedReadingAudioUrl, isAudioConfigLoading]);
 
   useEffect(() => {
     if (backgroundAudioRef.current) {
       backgroundAudioRef.current.muted = isMuted;
-       if (!isMuted && backgroundAudioRef.current.paused && reading && !reading.error) {
-        // If unmuted and audio was paused (e.g., by browser initially or explicitly)
-        // and reading is ready, try to play.
+       if (!isMuted && backgroundAudioRef.current.paused && selectedReadingAudioUrl && reading && !reading.error) {
         backgroundAudioRef.current.play().catch(error => {
           console.warn("Playback attempt after unmute failed:", error);
         });
       }
     }
-  }, [isMuted, reading]);
+  }, [isMuted, reading, selectedReadingAudioUrl]);
 
   const toggleMute = () => {
     setIsMuted(!isMuted);
@@ -148,12 +180,12 @@ export default function ReadingPage() {
     }
   };
 
-  if (authLoading || isLoadingStorage) {
+  if (authLoading || isLoadingStorage || isAudioConfigLoading) {
     return (
       <div className="container mx-auto min-h-screen flex flex-col items-center justify-center py-8">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <p className="ml-4 text-lg mt-4 text-muted-foreground">
-          {authLoading ? "Loading authentication..." : "Loading your reading..."}
+          {authLoading ? "Authenticating..." : (isLoadingStorage ? "Loading your reading..." : "Preparing ambience...")}
         </p>
       </div>
     );
@@ -183,16 +215,18 @@ export default function ReadingPage() {
   
   return (
     <div className="container mx-auto min-h-screen flex flex-col items-center py-8 selection:bg-accent selection:text-accent-foreground">
-      <audio ref={backgroundAudioRef} src="/audio/Whispers.MP3" loop />
+      <audio ref={backgroundAudioRef} src={selectedReadingAudioUrl || undefined} loop key={selectedReadingAudioUrl} />
       <header className="mb-6 w-full max-w-xl flex flex-col items-center">
          <div className="w-full flex justify-between items-center mb-6">
             <Button onClick={() => router.push('/get-reading')} variant="outline" className="self-start">
               <ArrowLeft className="mr-2 h-4 w-4" />
               New Reading
             </Button>
-            <Button onClick={toggleMute} variant="outline" size="icon" className="self-start" aria-label={isMuted ? "Unmute background audio" : "Mute background audio"}>
-              {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-            </Button>
+            {selectedReadingAudioUrl && (
+                <Button onClick={toggleMute} variant="outline" size="icon" className="self-start" aria-label={isMuted ? "Unmute background audio" : "Mute background audio"}>
+                {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                </Button>
+            )}
          </div>
         <div className="flex items-center justify-center mb-4">
           <BookOpenText className="h-12 w-12 text-primary mr-3" />
@@ -291,3 +325,6 @@ export default function ReadingPage() {
     </div>
   );
 }
+
+
+    
