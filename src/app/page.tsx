@@ -1,58 +1,80 @@
+
 'use client';
 
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { db } from '@/lib/firebase';
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { Loader2, AlertCircle, ImageOff } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface TileInfo {
-  imageSrc: string;
+  id: string; // Firestore document ID
+  imageURL: string;
   imageAlt: string;
   aiHint: string;
   active: boolean;
   targetPath?: string;
-  type: 'tea' | 'coffee' | 'tarot' | 'runes'; // Added type
+  readingMethodType: 'tea' | 'coffee' | 'tarot' | 'runes';
+  position: number;
 }
-
-const divinationTiles: TileInfo[] = [
-  {
-    imageSrc: '/images/tile_1_tea.svg',
-    imageAlt: 'A cup with tea leaves patterned at the bottom',
-    aiHint: 'tea leaves',
-    active: true,
-    targetPath: '/sipnread-home',
-    type: 'tea',
-  },
-  {
-    imageSrc: '/images/tile_2_coffee.svg',
-    imageAlt: 'Dark coffee grounds forming patterns in a white cup',
-    aiHint: 'coffee grounds',
-    active: false,
-    type: 'coffee',
-  },
-  {
-    imageSrc: '/images/tile_3_tarot.svg',
-    imageAlt: 'A spread of ornate Tarot cards on a mystical background',
-    aiHint: 'tarot cards',
-    active: false,
-    type: 'tarot',
-  },
-  {
-    imageSrc: '/images/tile_4_runes.svg',
-    imageAlt: 'A set of ancient carved runes scattered on a wooden surface',
-    aiHint: 'rune stones',
-    active: false,
-    type: 'runes',
-  },
-];
 
 export default function GatewayPage() {
   const router = useRouter();
+  const [tiles, setTiles] = useState<TileInfo[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchTiles = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const tilesQuery = query(
+          collection(db, 'images'),
+          where('type', '==', 'tiles'),
+          orderBy('position', 'asc')
+        );
+        const querySnapshot = await getDocs(tilesQuery);
+        const fetchedTilesData = querySnapshot.docs.map(doc => {
+          const data = doc.data();
+          // Ensure all required fields are present and correctly typed
+          return {
+            id: doc.id,
+            imageURL: data.imageURL || 'https://placehold.co/300x450.png?text=Image+Not+Found', // Fallback URL
+            imageAlt: data.imageAlt || 'Divination Tile',
+            aiHint: data.aiHint || 'divination',
+            active: typeof data.active === 'boolean' ? data.active : false,
+            targetPath: data.targetPath,
+            readingMethodType: ['tea', 'coffee', 'tarot', 'runes'].includes(data.readingMethodType) 
+                               ? data.readingMethodType 
+                               : 'tea', // Default to 'tea' if invalid
+            position: typeof data.position === 'number' ? data.position : 0,
+          } as TileInfo;
+        });
+        
+        if (fetchedTilesData.length === 0) {
+          console.warn("No 'tiles' found in the 'images' collection or all fetched items failed validation.");
+        }
+        setTiles(fetchedTilesData);
+
+      } catch (err) {
+        console.error("Error fetching divination tiles:", err);
+        setError(err instanceof Error ? err.message : "Failed to load divination choices.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchTiles();
+  }, []);
 
   const handleTileClick = (tile: TileInfo) => {
     if (tile.active && tile.targetPath) {
       if (typeof window !== 'undefined') {
-        localStorage.setItem('selectedReadingType', tile.type);
+        localStorage.setItem('selectedReadingType', tile.readingMethodType);
       }
       router.push(tile.targetPath);
     }
@@ -75,37 +97,59 @@ export default function GatewayPage() {
       </header>
 
       <main className="w-full max-w-xl">
-        <div className="grid grid-cols-2 gap-6 justify-items-center">
-          {divinationTiles.map((tile) => (
-            <Card
-              key={tile.imageAlt}
-              onClick={() => handleTileClick(tile)}
-              className={cn(
-                'relative overflow-hidden shadow-lg transition-all duration-300 ease-in-out transform hover:shadow-xl aspect-[2/3] w-full',
-                tile.active ? 'cursor-pointer hover:scale-105 group' : 'opacity-60 cursor-not-allowed bg-muted/30'
-              )}
-            >
-              <div className="relative w-full h-full">
-                <Image
-                  src={tile.imageSrc}
-                  alt={tile.imageAlt}
-                  fill
-                  sizes="(max-width: 767px) 50vw, (max-width: 1023px) 276px, 276px"
-                  data-ai-hint={tile.aiHint}
-                  className={cn(
-                    'object-cover',
-                    tile.active && 'group-hover:opacity-90 transition-opacity'
-                  )}
-                />
-                {!tile.active && (
-                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center p-2">
-                    <span className="text-white font-semibold text-sm sm:text-lg text-center bg-black/50 rounded px-2 py-1">Coming Soon</span>
-                  </div>
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-10">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <p className="mt-4 text-lg text-muted-foreground">Loading choices...</p>
+          </div>
+        ) : error ? (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error Loading Choices</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : tiles.length === 0 ? (
+           <Alert>
+            <ImageOff className="h-4 w-4" />
+            <AlertTitle>No Paths Available</AlertTitle>
+            <AlertDescription>
+              It seems there are no divination choices available at the moment. Please check back later.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <div className="grid grid-cols-2 gap-6 justify-items-center">
+            {tiles.map((tile) => (
+              <Card
+                key={tile.id}
+                onClick={() => handleTileClick(tile)}
+                className={cn(
+                  'relative overflow-hidden shadow-lg transition-all duration-300 ease-in-out transform hover:shadow-xl aspect-[2/3] w-full',
+                  tile.active ? 'cursor-pointer hover:scale-105 group' : 'opacity-60 cursor-not-allowed bg-muted/30'
                 )}
-              </div>
-            </Card>
-          ))}
-        </div>
+              >
+                <div className="relative w-full h-full">
+                  <Image
+                    src={tile.imageURL}
+                    alt={tile.imageAlt}
+                    fill
+                    sizes="(max-width: 767px) 50vw, (max-width: 1023px) 276px, 276px"
+                    data-ai-hint={tile.aiHint}
+                    className={cn(
+                      'object-cover',
+                      tile.active && 'group-hover:opacity-90 transition-opacity'
+                    )}
+                    unoptimized={tile.imageURL.startsWith('https://firebasestorage.googleapis.com')} // Keep unoptimized for Firebase Storage URLs
+                  />
+                  {!tile.active && (
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center p-2">
+                      <span className="text-white font-semibold text-sm sm:text-lg text-center bg-black/50 rounded px-2 py-1">Coming Soon</span>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </main>
       <footer className="text-center mt-12 py-6 text-sm text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Sip-n-Read. All mystical rights reserved.</p>
