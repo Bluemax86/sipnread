@@ -49,6 +49,22 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // appTiles: Only accessible by admin processes.
+    match /mail/{document=**} {
+      allow read: if true;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // audioTracks: Only accessible by admin processes.
+    match /audioTracks/{document=**} {
+      allow read: if true;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
     // Mail: Only accessible by backend/admin processes.
     match /mail/{document=**} {
       allow read, write: if false;
