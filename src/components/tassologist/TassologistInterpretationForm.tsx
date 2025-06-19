@@ -492,7 +492,7 @@ export function TassologistInterpretationForm({
                 className="flex items-center w-full sm:w-auto"
               >
                 {isExtractingSymbols ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanSearch className="mr-2 h-4 w-4" />}
-                Get Symbols from Text
+                Get Symbols
               </Button>
               <Button
                 type="button"
