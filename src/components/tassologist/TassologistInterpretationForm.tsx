@@ -30,7 +30,7 @@ const symbolSchema = z.object({
 
 const tassologistInterpretationSchema = z.object({
   manualSymbols: z.array(symbolSchema).max(20, "Maximum of 20 symbols allowed."),
-  manualInterpretation: z.string().min(10, "Interpretation must be at least 10 characters long."),
+  manualInterpretation: z.string(), // Removed min(10) for draft saves
 });
 
 export type TassologistInterpretationFormValues = z.infer<typeof tassologistInterpretationSchema>;
@@ -305,6 +305,17 @@ export function TassologistInterpretationForm({
   }, []);
 
   const handleFormSubmitInternal = (saveType: SaveTassologistInterpretationType) => {
+    // Validate interpretation length before submitting for 'complete'
+    if (saveType === 'complete') {
+      const interpretation = form.getValues('manualInterpretation');
+      if (!interpretation || interpretation.trim().length < 10) {
+        form.setError('manualInterpretation', {
+          type: 'manual',
+          message: 'Interpretation must be at least 10 characters long to complete.',
+        });
+        return;
+      }
+    }
     return form.handleSubmit((data) => onSubmit(data, saveType))();
   };
 
@@ -458,32 +469,8 @@ export function TassologistInterpretationForm({
               name="manualInterpretation"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between w-full">
-                    <span><Sparkles className="inline mr-1 h-4 w-4 text-muted-foreground" /> Your Interpretation</span>
-                    <div className="flex flex-wrap gap-2 w-full md:w-auto justify-start md:justify-end">
-                      <Button
-                        type="button"
-                        onClick={handleExtractSymbols}
-                        variant="outline"
-                        size="sm"
-                        disabled={getSymbolsButtonDisabled}
-                        className="flex items-center"
-                      >
-                        {isExtractingSymbols ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanSearch className="mr-2 h-4 w-4" />}
-                        Get Symbols
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={handleStartStopDictation}
-                        variant={isRecording ? "destructive" : "outline"}
-                        size="sm"
-                        disabled={dictationButtonDisabled}
-                        className="flex items-center"
-                      >
-                        {isRecording ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mic className="mr-2 h-4 w-4" />}
-                        {dictationButtonText}
-                      </Button>
-                    </div>
+                  <FormLabel className="flex items-center">
+                    <Sparkles className="inline mr-1 h-4 w-4 text-muted-foreground" /> Your Interpretation
                   </FormLabel>
                   <FormControl>
                     <Textarea
@@ -499,7 +486,32 @@ export function TassologistInterpretationForm({
               )}
             />
 
-            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-start gap-3 pt-2">
+              <Button
+                type="button"
+                onClick={handleExtractSymbols}
+                variant="outline"
+                size="sm"
+                disabled={getSymbolsButtonDisabled}
+                className="flex items-center w-full sm:w-auto"
+              >
+                {isExtractingSymbols ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanSearch className="mr-2 h-4 w-4" />}
+                Get Symbols from Text
+              </Button>
+              <Button
+                type="button"
+                onClick={handleStartStopDictation}
+                variant={isRecording ? "destructive" : "outline"}
+                size="sm"
+                disabled={dictationButtonDisabled}
+                className="flex items-center w-full sm:w-auto"
+              >
+                {isRecording ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mic className="mr-2 h-4 w-4" />}
+                {dictationButtonText}
+              </Button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 pt-4">
                <Button
                 type="button"
                 onClick={() => handleFormSubmitInternal('draft')}
@@ -544,3 +556,4 @@ export function TassologistInterpretationForm({
     </Card>
   );
 }
+
