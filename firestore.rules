@@ -4,69 +4,65 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if the currently authenticated user is a Tassologist
-    function isTassologist() {
-      return request.auth != null && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'tassologist';
-    }
-
-    // Helper function to check if the currently authenticated user owns the document (based on a userId field)
-    function isOwner(docUserId) {
-      return request.auth != null && request.auth.uid == docUserId;
-    }
-
     // Profiles:
-    // - Users can read their own profile.
-    // - Tassologists can read any user's profile (e.g., to see requester details).
-    // - Users can create and update their own profile.
+    // - Authenticated users can read and update their own profile.
+    // - Authenticated users can create their own profile document.
+    // - Tassologists can read all user profiles and update any profile.
     match /profiles/{userId} {
-      allow read: if isOwner(userId) || isTassologist();
-      allow create: if isOwner(userId); // Typically, profile creation is linked to signup
-      allow update: if isOwner(userId); // Users can update their own profile
-      allow delete: if false; // Deleting profiles is usually an admin action
+      allow read: if request.auth != null && (request.auth.uid == userId || get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'tassologist');
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && (request.auth.uid == userId || get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'tassologist');
+      // Deny delete by default unless explicitly needed
+      allow delete: if false;
     }
 
-    // Readings:
-    // - Users can read their own readings.
-    // - Tassologists can read any reading, especially original readings linked to personalized requests.
-    // - Users write their own readings (usually via functions).
-    // - Tassologists can update readings if necessary (e.g., if a function updates it based on their input).
+    // Readings (AI-generated ones, potentially with user's manual additions later):
+    // - Authenticated users can manage (create, read, update) their own readings.
+    // - Tassologists can read any reading (e.g., if linked to a personalized request).
     match /readings/{readingId} {
-      allow read: if isOwner(resource.data.userId) || isTassologist();
-      allow create: if isOwner(resource.data.userId); // User creates their own reading
-      allow update: if isTassologist() || isOwner(resource.data.userId); // Tassologists or owners can update
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'tassologist');
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'tassologist');
+      // Deny delete by default unless explicitly needed
       allow delete: if false;
     }
 
-    // PersonalizedReadings:
-    // - Users can read their own personalized requests.
-    // - Tassologists can read any personalized request.
-    // - Users can create their own requests.
-    // - Tassologists can update any request (e.g., to change status, add interpretation details).
+    // PersonalizedReadings (Roxy's requests):
+    // - Authenticated users can manage their own requests.
+    // - Tassologists can manage any request (read, update for processing).
     match /personalizedReadings/{requestId} {
-      allow read: if isOwner(resource.data.userId) || isTassologist();
-      allow create: if isOwner(resource.data.userId); // User creates their own request
-      allow update: if isTassologist() || isOwner(resource.data.userId); // Tassologists or owners can update
+      allow read, update: if request.auth != null && (resource.data.userId == request.auth.uid || resource.data.tassologistId == request.auth.uid || get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'tassologist');
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      // Deny delete by default unless explicitly needed
       allow delete: if false;
     }
 
-    // appTiles: Only accessible by admin processes.
-    match /mail/{document=**} {
+    // appTiles:
+    // - Publicly readable by anyone (for the Gateway page).
+    // - Not writable by clients (should be managed via Firebase console or admin SDK).
+    match /appTiles/{tileId} {
       allow read: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow create, update, delete: if false; // Or restrict to admin/specific role if needed
     }
 
-    // audioTracks: Only accessible by admin processes.
-    match /audioTracks/{document=**} {
+    // audioTracks:
+    // - Publicly readable by anyone (for fetching audio URLs for UI).
+    // - Not writable by clients (should be managed via Firebase console or admin SDK).
+    match /audioTracks/{trackType} {
       allow read: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow create, update, delete: if false;
+    }
+    
+    // Mail collection for sending emails (Triggered by Firebase Extension: Trigger Email)
+    // - Only allow creates by authenticated users (or specific server-side logic if using Admin SDK).
+    // - Deny reads, updates, deletes from client-side.
+    match /mail/{mailId} {
+      allow read, update, delete: if false;
+      allow create: if request.auth != null; // Or more restrictive if needed
     }
 
-    // Mail: Only accessible by backend/admin processes.
-    match /mail/{document=**} {
+    // Default deny all other paths if not explicitly matched above
+    match /{document=**} {
       allow read, write: if false;
     }
   }
