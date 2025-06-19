@@ -3,12 +3,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+// import Link from 'next/link'; // Link was unused
 import { ImageUploadForm } from '@/components/sipnread/ImageUploadForm';
 import { getTeaLeafAiAnalysisAction, type FullInterpretationResult } from '../actions';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, AlertCircle, Send, CheckCircle, Wand2, Brain, Database, ArrowLeft, LogIn, UserPlus, LockKeyhole } from 'lucide-react';
+// import { Button } from '@/components/ui/button'; // Button was unused
+// import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'; // Card components were unused
+import { Loader2, AlertCircle, Wand2, Brain, Database, LockKeyhole, LogIn, UserPlus } from 'lucide-react';
+import { Button } from '@/components/ui/button'; // Re-added for login/signup
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'; // Re-added for login prompt
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
@@ -18,7 +20,7 @@ import { doc, getDoc } from 'firebase/firestore';
 
 
 export default function GetReadingPage() {
-  const [result, setResult] = useState<FullInterpretationResult | null>(null);
+  const [result, setResult] = useState<FullInterpretationResult | null>(null); // Still used for error display
   const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [isSavingReading, setIsSavingReading] = useState(false);
   const router = useRouter();
@@ -31,7 +33,7 @@ export default function GetReadingPage() {
   const loadingAudioRef = useRef<HTMLAudioElement | null>(null);
   const musicStartTimeRef = useRef<number | null>(null);
 
-  const [generatingAudioUrls, setGeneratingAudioUrls] = useState<string[]>([]);
+  // const [generatingAudioUrls, setGeneratingAudioUrls] = useState<string[]>([]); // Removed as it's specific to this page's audio
   const [selectedAudioUrl, setSelectedAudioUrl] = useState<string | null>(null);
   const [isAudioConfigLoading, setIsAudioConfigLoading] = useState(true);
 
@@ -56,7 +58,7 @@ export default function GetReadingPage() {
         if (generatingDocSnap.exists()) {
           const data = generatingDocSnap.data();
           if (data.audioURLs && Array.isArray(data.audioURLs) && data.audioURLs.every(url => typeof url === 'string' && url.trim() !== '')) {
-            setGeneratingAudioUrls(data.audioURLs);
+            // setGeneratingAudioUrls(data.audioURLs); // Removed
             if (data.audioURLs.length > 0) {
               const randomIndex = Math.floor(Math.random() * data.audioURLs.length);
               setSelectedAudioUrl(data.audioURLs[randomIndex]);
@@ -117,14 +119,14 @@ export default function GetReadingPage() {
       setResult(null);
       setIsLoadingAI(false);
       setIsSavingReading(false);
-      setShowLoginPromptCard(true); // Ensure prompt is shown if somehow bypassed
+      setShowLoginPromptCard(true); 
       return;
     }
     setShowLoginPromptCard(false); 
 
     setIsLoadingAI(true);
     setIsSavingReading(false);
-    setResult(null);
+    setResult(null); // Clear previous errors
     localStorage.removeItem('teaLeafReadingResult');
 
     if (loadingAudioRef.current && selectedAudioUrl) {
@@ -212,17 +214,18 @@ export default function GetReadingPage() {
         setIsSavingReading(false);
 
         if (saveSucceeded && aiAnalysisResponse && finalReadingId) {
-          const finalResultForState: FullInterpretationResult = {
+          const finalResultForStorage: FullInterpretationResult = {
             ...aiAnalysisResponse,
-            readingType: aiAnalysisResponse.readingType,
+            readingType: aiAnalysisResponse.readingType, // Ensure readingType is included
             readingId: finalReadingId,
-            error: undefined,
+            error: undefined, 
           };
-          setResult(finalResultForState);
-          localStorage.setItem('teaLeafReadingResult', JSON.stringify(finalResultForState));
+          localStorage.setItem('teaLeafReadingResult', JSON.stringify(finalResultForStorage));
+          router.push('/reading'); // Navigate to reading page
         } else {
+          // If there was an error, keep it in the 'result' state to display on this page
           setResult({
-            ...(aiAnalysisResponse || {}),
+            ...(aiAnalysisResponse || {}), // Spread any partial AI response
             readingType: aiAnalysisResponse?.readingType,
             error: errorForState || "An unknown error occurred after processing."
           });
@@ -232,7 +235,7 @@ export default function GetReadingPage() {
       const processingEndTime = Date.now();
       const musicStartedAt = musicStartTimeRef.current;
       const elapsedTimeMs = musicStartedAt ? processingEndTime - musicStartedAt : Infinity;
-      const minDisplayTimeMs = 10000;
+      const minDisplayTimeMs = 10000; 
 
       if (musicStartedAt && elapsedTimeMs < minDisplayTimeMs) {
         const delayMs = minDisplayTimeMs - elapsedTimeMs;
@@ -297,7 +300,7 @@ export default function GetReadingPage() {
                 !overallLoading && !result ? "opacity-100" : "opacity-0 pointer-events-none absolute inset-0"
               )}
             >
-              <ImageUploadForm onSubmit={handleInterpretation} isLoading={overallLoading || (!selectedAudioUrl && generatingAudioUrls.length > 0)} />
+              <ImageUploadForm onSubmit={handleInterpretation} isLoading={overallLoading || (!selectedAudioUrl && !isAudioConfigLoading)} />
             </div>
 
             <div
@@ -319,43 +322,22 @@ export default function GetReadingPage() {
                 </>
               )}
             </div>
-
-            <div
-              className={cn(
-                "absolute inset-0 transition-opacity duration-300 ease-in-out",
-                result && !overallLoading ? "opacity-100" : "opacity-0 pointer-events-none"
-              )}
-            >
-              {(result && !overallLoading) && (
-                <>
-                  {result.error && (
-                    <Card className="w-full max-w-xl shadow-lg animate-fade-in text-center">
-                      <CardHeader>
-                        <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-3" />
-                        <CardTitle className="text-2xl font-headline text-destructive">Reading Process Error</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-muted-foreground mb-6">{result.error}</p>
-                        <Button onClick={() => { setResult(null); setIsLoadingAI(false); setIsSavingReading(false); musicStartTimeRef.current = null; setShowLoginPromptCard(false); }} variant="outline">
-                          Try Again
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {result.aiInterpretation && result.readingId && !result.error && (
-                    <div className="p-6 bg-card rounded-lg shadow-md text-center">
-                      <CheckCircle className="h-12 w-12 text-primary mx-auto mb-4" />
-                      <h3 className="text-2xl font-semibold text-primary mb-3">Your Reading is Ready!</h3>
-                      <p className="text-card-foreground mb-6">Your tea leaf interpretation has been generated and saved.</p>
-                      <Button onClick={() => router.push('/reading')} size="lg">
-                        <Send className="mr-2 h-5 w-5" />
-                        View My Reading
-                      </Button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            
+            {/* Error display on this page if something went wrong before navigating */}
+             {(result && result.error && !overallLoading) && (
+                <Card className="w-full max-w-xl shadow-lg animate-fade-in text-center">
+                    <CardHeader>
+                    <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-3" />
+                    <CardTitle className="text-2xl font-headline text-destructive">Reading Process Error</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                    <p className="text-muted-foreground mb-6">{result.error}</p>
+                    <Button onClick={() => { setResult(null); setIsLoadingAI(false); setIsSavingReading(false); musicStartTimeRef.current = null; setShowLoginPromptCard(false); }} variant="outline">
+                        Try Again
+                    </Button>
+                    </CardContent>
+                </Card>
+            )}
           </div>
         )}
       </main>
