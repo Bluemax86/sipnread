@@ -65,9 +65,10 @@ export default function GatewayPage() {
           
           const active = typeof data.active === 'boolean' ? data.active : false;
           
-          const targetPath = (typeof data.target_path === 'string' && data.target_path.startsWith('/'))
-                                ? data.target_path
-                                : '/'; // Default to gateway if target_path is bad
+          // Corrected to use data.targetPath (camelCase) as seen in Firestore screenshot
+          const targetPath = (typeof data.targetPath === 'string' && data.targetPath.startsWith('/'))
+                                ? data.targetPath
+                                : '/'; 
 
           const position = typeof data.position === 'number' ? data.position : 0;
 
