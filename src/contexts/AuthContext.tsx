@@ -152,14 +152,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setLoadingProfile(false);
         return { success: true, userProfile: profile };
       }
+      // This case should ideally not be reached if signInWithEmailAndPassword succeeds
       setLoading(false);
       setLoadingProfile(false);
-      return { success: false, error: { code: 'auth/user-not-found', message: 'User not found after sign-in.' } as AuthError };
+      return { success: false, error: { code: 'auth/internal-error', message: 'User authentication succeeded but user object is not available.' } as AuthError };
     } catch (error) {
-      console.error('[AuthContext] signIn - Error:', error);
+      const authError = error as AuthError;
+      // Log common, handled auth errors with console.info, others with console.error
+      if (authError.code === 'auth/invalid-credential' || 
+          authError.code === 'auth/user-not-found' || 
+          authError.code === 'auth/wrong-password' ||
+          authError.code === 'auth/invalid-email') {
+        console.info(`[AuthContext] signIn - Handled authentication error: ${authError.code}`);
+      } else {
+        console.error('[AuthContext] signIn - Error:', authError);
+      }
       setLoading(false);
       setLoadingProfile(false);
-      return { success: false, error: error as AuthError };
+      return { success: false, error: authError };
     }
   };
 
@@ -193,3 +203,4 @@ export const useAuth = () => {
   }
   return context;
 };
+
