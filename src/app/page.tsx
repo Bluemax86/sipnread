@@ -61,15 +61,13 @@ export default function GatewayPage() {
                                 ? data.imageAlt
                                 : `${readingMethodType.charAt(0).toUpperCase() + readingMethodType.slice(1)} Reading Tile`;
           
-          // aiHint is now derived from the readingMethodType (document ID)
           const aiHint = readingMethodType;
           
           const active = typeof data.active === 'boolean' ? data.active : false;
           
-          // Use targetPath, default to /welcome if not specified or malformed.
-          const targetPath = (typeof data.targetPath === 'string' && data.targetPath.startsWith('/'))
-                                ? data.targetPath
-                                : '/welcome'; 
+          const targetPath = (typeof data.target_path === 'string' && data.target_path.startsWith('/'))
+                                ? data.target_path
+                                : '/'; // Default to gateway if target_path is bad
 
           const position = typeof data.position === 'number' ? data.position : 0;
 
@@ -107,7 +105,7 @@ export default function GatewayPage() {
       if (typeof window !== 'undefined') {
         localStorage.setItem('selectedReadingType', tile.readingMethodType);
       }
-      router.push(tile.targetPath); // Uses the mapped targetPath
+      router.push(tile.targetPath);
     }
   };
 
@@ -171,7 +169,7 @@ export default function GatewayPage() {
                       tile.active && 'group-hover:opacity-90 transition-opacity'
                     )}
                     unoptimized={tile.imageURL.startsWith('https://firebasestorage.googleapis.com')}
-                    priority={index === 0} // Add priority to the first tile image
+                    priority={index === 0} 
                   />
                   {!tile.active && (
                     <div className="absolute inset-0 bg-black/30 flex items-center justify-center p-2">
