@@ -97,13 +97,14 @@ export default function ReadingPage() {
     fetchAudioTracks();
   }, []);
 
-
   useEffect(() => {
     const audio = backgroundAudioRef.current;
     if (audio && selectedReadingAudioUrl && reading && !reading.error && !isLoadingStorage && !isAudioConfigLoading) {
-      if (!isMuted) {
+      audio.muted = isMuted; // Ensure mute state is applied
+      if (audio.paused) { // Only attempt to play if it's currently paused
         audio.play().catch(error => {
           console.warn("Background audio autoplay prevented. User interaction might be needed or browser settings are blocking it.", error);
+          // If autoplay fails, we rely on the user clicking the mute/unmute button.
         });
       }
     }
@@ -116,19 +117,27 @@ export default function ReadingPage() {
     };
   }, [isMuted, reading, isLoadingStorage, selectedReadingAudioUrl, isAudioConfigLoading]);
 
-  useEffect(() => {
-    if (backgroundAudioRef.current) {
-      backgroundAudioRef.current.muted = isMuted;
-       if (!isMuted && backgroundAudioRef.current.paused && selectedReadingAudioUrl && reading && !reading.error) {
-        backgroundAudioRef.current.play().catch(error => {
-          console.warn("Playback attempt after unmute failed:", error);
-        });
-      }
-    }
-  }, [isMuted, reading, selectedReadingAudioUrl]);
 
   const toggleMute = () => {
-    setIsMuted(!isMuted);
+    const audio = backgroundAudioRef.current;
+    if (!audio) return;
+
+    const newMutedState = !isMuted;
+    setIsMuted(newMutedState); // Update React state
+    audio.muted = newMutedState; // Update HTMLMediaElement property
+
+    // If unmuting AND the audio is currently paused (e.g., autoplay failed), try to play it now.
+    // This click serves as a user interaction.
+    if (!newMutedState && audio.paused) {
+      audio.play().catch(error => {
+        console.warn("Playback attempt after unmute failed:", error);
+        toast({
+          variant: "default",
+          title: "Audio Playback",
+          description: "Could not start audio. Your browser might require another click on the unmute button or interaction with the page.",
+        });
+      });
+    }
   };
 
   const handleRequestRoxyReading = async () => {
@@ -330,6 +339,4 @@ export default function ReadingPage() {
     </div>
   );
 }
-
-
     
