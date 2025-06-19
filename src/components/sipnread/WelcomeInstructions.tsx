@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -30,7 +31,6 @@ interface InstructionSet {
   imageAiHint?: string;
 }
 
-// Coffee instructions removed from here, as they will be handled by CoffeeWelcomeInstructions.tsx
 const instructionsData: Record<string, InstructionSet> = {
   tea: {
     pageTitle: "Preparing for Your Tea Leaf Reading",
@@ -107,10 +107,11 @@ const instructionsData: Record<string, InstructionSet> = {
     imageAlt: "Set of runes",
     imageAiHint: "runes stones",
   },
+  // Note: Coffee instructions are handled by CoffeeWelcomeInstructions.tsx
 };
 
 interface WelcomeInstructionsProps {
-  readingType: "tea" | "tarot" | "runes"; // Coffee is handled separately
+  readingType: "tea" | "tarot" | "runes";
 }
 
 export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
@@ -140,7 +141,8 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
     if (data) {
       setInstructions(data);
     } else {
-      router.replace('/');
+      // This case should ideally not be hit if routing is correct, but as a fallback:
+      router.replace('/'); 
     }
     setIsLoadingContent(false);
   }, [readingType, router]);
@@ -159,15 +161,16 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
         sessionStorage.removeItem(DISCLAIMER_SESSION_STORAGE_KEY);
         sessionStorage.removeItem(PROFILE_REMINDER_SESSION_STORAGE_KEY);
       }
-      if (disclaimerAcknowledgedThisSession) {
+      if (disclaimerAcknowledgedThisSession) { // Check if state was true before reset
         setDisclaimerAcknowledgedThisSession(false);
       }
-      if (profileReminderDismissedThisSession) {
+      if (profileReminderDismissedThisSession) { // Check if state was true before reset
         setProfileReminderDismissedThisSession(false);
       }
-      setShowProfileReminderBanner(false);
+      setShowProfileReminderBanner(false); // Ensure banner is hidden if user logs out or changes role
     }
   }, [user, userProfile, authLoading, loadingProfile, disclaimerAcknowledgedThisSession, profileReminderDismissedThisSession]);
+
 
   useEffect(() => {
     if (user && userProfile && userProfile.role === 'user' && !authLoading && !loadingProfile) {
@@ -178,9 +181,10 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
         setShowProfileReminderBanner(false);
       }
     } else {
-      setShowProfileReminderBanner(false);
+      setShowProfileReminderBanner(false); // Hide if not a 'user' or loading
     }
   }, [user, userProfile, authLoading, loadingProfile, profileReminderDismissedThisSession]);
+
 
   const handleAcknowledgeDisclaimerCard = () => {
     if (typeof window !== 'undefined') {
@@ -206,6 +210,7 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
 
   const shouldShowDisclaimerCard = user && userProfile && userProfile.role === 'user' && !disclaimerAcknowledgedThisSession && !authLoading && !loadingProfile;
 
+
   if (authLoading || loadingProfile || isLoadingContent) {
     return (
       <div className="container mx-auto min-h-screen flex flex-col items-center justify-center py-8">
@@ -216,6 +221,7 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
   }
 
   if (!instructions) {
+    // This state should ideally be covered by the setIsLoadingContent or redirect in useEffect
     return (
         <div className="container mx-auto min-h-screen flex flex-col items-center justify-center py-8">
             <p>Instructions not found for {readingType}.</p>
@@ -228,7 +234,7 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
     <div className="container mx-auto min-h-screen flex flex-col items-center justify-center py-8 selection:bg-accent selection:text-accent-foreground">
       <header className="text-center mb-10">
         <Image
-          src={instructions.imageSrc || "/swirl-logo.png"}
+          src={instructions.imageSrc || "/swirl-logo.png"} // Fallback to default logo
           alt={instructions.imageAlt || "SipnRead Logo"}
           width={77}
           height={77}
@@ -293,6 +299,7 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
           </Alert>
         )}
 
+
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="font-headline text-2xl flex items-center">
@@ -304,7 +311,14 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
             {instructions.steps.map((step, index) => (
               <div key={index} className="flex items-start">
                 <step.icon className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-                <p><span className="font-semibold">{step.title}</span> {step.description}</p>
+                <div className="flex-1">
+                  <p className="font-semibold text-base text-card-foreground">{step.title}</p>
+                  {typeof step.description === 'string' ? (
+                    <p className="text-sm text-muted-foreground">{step.description}</p>
+                  ) : (
+                    <div className="text-sm text-muted-foreground mt-1">{step.description}</div>
+                  )}
+                </div>
               </div>
             ))}
              {instructions.importantNotes && instructions.importantNotes.length > 0 && (
@@ -337,3 +351,4 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
     </div>
   );
 }
+
