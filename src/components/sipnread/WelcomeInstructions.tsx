@@ -67,6 +67,41 @@ const instructionsData: Record<string, InstructionSet> = {
     imageAlt: "SipnRead Swirl Logo",
     imageAiHint: "logo swirl",
   },
+  coffee: {
+    pageTitle: "Preparing for Your Coffee Reading",
+    pageTagline: "Follow these steps carefully to ensure the best possible reading.",
+    cardTitle: "How It Works",
+    cardDescription: "Follow these simple steps for your coffee reading:",
+    steps: [
+      { icon: Coffee, title: "Brew Your Coffee:", description: "Prepare your favorite loose-leaf tea in a cup." },
+      { icon: Droplets, title: "Enjoy & Prepare:", description: "Drink your tea, leaving a very small amount of liquid and leaves at the bottom." },
+      { icon: Repeat, title: "The Ritual:", description: "Gently swirl the cup three times anticlockwise. Ensure no one else touches your cup." },
+      { icon: Filter, title: "Drain Excess:", description: "Invert the cup onto a saucer and let it drain for about a minute." },
+      {
+        icon: Camera, title: "Capture the Moment (4 Photos):", description: (
+          <>
+            Turn the cup upright. Starting with the cup handle in the 3 o&apos;clock position, take four clear photos from above the cup. Make sure the entire cup including the handle are clearly visible, rotating the cup for each shot, with the handle at these positions:
+            <ul className="list-none pl-0 mt-2 space-y-1 text-xs sm:text-sm">
+              <li className="flex items-center"><Clock3 className="h-4 w-4 text-primary mr-2 shrink-0" /> Handle at 3 o&apos;clock (handle right side)</li>
+              <li className="flex items-center"><Clock6 className="h-4 w-4 text-primary mr-2 shrink-0" /> Handle at 6 o&apos;clock (handle towards you)</li>
+              <li className="flex items-center"><Clock9 className="h-4 w-4 text-primary mr-2 shrink-0" /> Handle at 9 o&apos;clock (handle left side)</li>
+              <li className="flex items-center"><Clock12 className="h-4 w-4 text-primary mr-2 shrink-0" /> Handle at 12 o&apos;clock (handle away from you)</li>
+            </ul>
+          </>
+        )
+      },
+      { icon: UploadCloud, title: "Get Your Reading:", description: "Upload your photo(s). You can also ask a specific question to guide the AI." },
+      { icon: Wand2, title: "Unveil Your Destiny:", description: "Our AI will analyze the symbols and provide your unique interpretation!" }
+    ],
+    importantNotes: [
+      "Use a plain, light-colored cup for best results.",
+      "Focus your intention or question while drinking and swirling the tea.",
+      "Try to capture as much of the cup's interior as possible in each photo."
+    ],
+    imageSrc: "/swirl-logo.png",
+    imageAlt: "SipnRead Swirl Logo",
+    imageAiHint: "logo swirl",
+  },
   tarot: {
     pageTitle: "Preparing for Your Tarot Reading",
     pageTagline: "Consult the cards for guidance and clarity.",
@@ -111,7 +146,7 @@ const instructionsData: Record<string, InstructionSet> = {
 };
 
 interface WelcomeInstructionsProps {
-  readingType: "tea" | "tarot" | "runes";
+  readingType: "tea" | "coffee" | "tarot" | "runes";
 }
 
 export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
