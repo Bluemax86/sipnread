@@ -30,7 +30,7 @@ const symbolSchema = z.object({
 
 const tassologistInterpretationSchema = z.object({
   manualSymbols: z.array(symbolSchema).max(20, "Maximum of 20 symbols allowed."),
-  manualInterpretation: z.string().min(10, "Interpretation must be at least 10 characters long.").max(5000, "Interpretation cannot exceed 5000 characters."),
+  manualInterpretation: z.string().min(10, "Interpretation must be at least 10 characters long."),
 });
 
 export type TassologistInterpretationFormValues = z.infer<typeof tassologistInterpretationSchema>;
