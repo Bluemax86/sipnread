@@ -30,7 +30,7 @@ const symbolSchema = z.object({
 
 const tassologistInterpretationSchema = z.object({
   manualSymbols: z.array(symbolSchema).max(20, "Maximum of 20 symbols allowed."),
-  manualInterpretation: z.string(), // Removed min(10) for draft saves
+  manualInterpretation: z.string(),
 });
 
 export type TassologistInterpretationFormValues = z.infer<typeof tassologistInterpretationSchema>;
@@ -182,12 +182,9 @@ export function TassologistInterpretationForm({
       return;
     } else {
       toast({ variant: "destructive", title: "Browser Not Supported", description: "Speech recognition is not supported by your browser." });
-      // Fallback or alternative dictation method could be placed here if needed
-      // For now, if the API isn't supported, we just inform the user and do nothing further.
       return;
     }
 
-    // Server-side dictation code (Preserved but not currently reachable if client-side API is supported)
     if (false) { 
       if (isRecording) {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -305,7 +302,6 @@ export function TassologistInterpretationForm({
   }, []);
 
   const handleFormSubmitInternal = (saveType: SaveTassologistInterpretationType) => {
-    // Validate interpretation length before submitting for 'complete'
     if (saveType === 'complete') {
       const interpretation = form.getValues('manualInterpretation');
       if (!interpretation || interpretation.trim().length < 10) {
@@ -344,9 +340,9 @@ export function TassologistInterpretationForm({
         }));
 
         if (newSymbolsForForm.length > 0) {
-          replace(newSymbolsForForm); // Replace existing symbols with new ones
+          replace(newSymbolsForForm); 
         } else {
-          replace([{ symbol: '', position: undefined}]); // If no symbols found, clear to one empty field
+          replace([{ symbol: '', position: undefined}]); 
           toast({ title: 'No Symbols Found', description: 'The AI could not identify specific symbols in your text.' });
         }
         toast({ title: 'Symbols Extracted!', description: `${newSymbolsForForm.length} symbols updated.` });
@@ -424,7 +420,7 @@ export function TassologistInterpretationForm({
                               } else {
                                 const num = Number(rawValue);
                                 if (!isNaN(num) && num < 0) {
-                                  field.onChange(0); // Clamp to 0 if negative
+                                  field.onChange(0); 
                                 } else {
                                   field.onChange(isNaN(num) ? undefined : num);
                                 }
@@ -485,8 +481,8 @@ export function TassologistInterpretationForm({
                 </FormItem>
               )}
             />
-
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-start gap-3 pt-2">
+            
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 pt-2">
               <Button
                 type="button"
                 onClick={handleExtractSymbols}
@@ -556,4 +552,3 @@ export function TassologistInterpretationForm({
     </Card>
   );
 }
-
