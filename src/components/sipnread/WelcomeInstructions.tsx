@@ -1,17 +1,16 @@
-
 'use client';
 
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Send, Coffee, Droplets, Repeat, Filter, Camera, UploadCloud, Clock3, Clock6, Clock9, Clock12, Layers, Languages, ShieldAlert, Info, Edit3, X, Pyramid, Scroll, Wand2 } from 'lucide-react';
+import { Send, Coffee, Droplets, Repeat, Filter, Camera, UploadCloud, Clock3, Clock6, Clock9, Clock12, Layers, Languages, ShieldAlert, Info, Edit3, X, Pyramid, Scroll, Wand2, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const DISCLAIMER_SESSION_STORAGE_KEY = 'disclaimerAcknowledged_sipnread_session';
 const PROFILE_REMINDER_SESSION_STORAGE_KEY = 'profileReminderDismissed_sipnread_session';
-
 
 interface InstructionStep {
   icon: React.ElementType;
@@ -20,17 +19,18 @@ interface InstructionStep {
 }
 
 interface InstructionSet {
-  pageTitle: string; // e.g., "Preparing for Your Tea Leaf Reading"
-  pageTagline: string; // e.g., "Follow these steps carefully..."
-  cardTitle: string; // e.g., "How It Works"
-  cardDescription: string; // e.g., "Follow these simple steps for your tea leaf reading:"
+  pageTitle: string;
+  pageTagline: string;
+  cardTitle: string;
+  cardDescription: string;
   steps: InstructionStep[];
-  importantNotes?: string[]; // Optional important notes section
-  imageSrc?: string; // Optional image for the header of this instruction page
+  importantNotes?: string[];
+  imageSrc?: string;
   imageAlt?: string;
   imageAiHint?: string;
 }
 
+// Coffee instructions removed from here, as they will be handled by CoffeeWelcomeInstructions.tsx
 const instructionsData: Record<string, InstructionSet> = {
   tea: {
     pageTitle: "Preparing for Your Tea Leaf Reading",
@@ -66,26 +66,6 @@ const instructionsData: Record<string, InstructionSet> = {
     imageSrc: "/swirl-logo.png",
     imageAlt: "SipnRead Swirl Logo",
     imageAiHint: "logo swirl",
-  },
-  coffee: {
-    pageTitle: "Preparing for Your Coffee Ground Reading",
-    pageTagline: "Unlock the wisdom held within your coffee grounds.",
-    cardTitle: "The Coffee Ritual",
-    cardDescription: "Follow these steps for an insightful coffee ground reading:",
-    steps: [
-      { icon: Coffee, title: "Brew Your Coffee:", description: "Prepare Turkish coffee or a similar unfiltered coffee, allowing sediment to settle. A cup with angled sidewalls works best." },
-      { icon: Droplets, title: "Sip and Swirl:", description: "Drink the coffee, leaving the thick sediment and a tiny bit of liquid at the bottom. Gently swirl the cup three times." },
-      { icon: Repeat, title: "Invert and Wait:", description: "Cover the cup with the saucer and invert them together. Let it sit for 5-10 minutes for the grounds to settle and dry slightly." },
-      { icon: Camera, title: "Capture the Patterns:", description: "Carefully lift the cup. Take clear, well-lit photos of the patterns inside the cup from various angles. Also, photograph any patterns on the saucer." },
-      { icon: UploadCloud, title: "Submit for Interpretation:", description: "Upload your images. You can ask a specific question if you have one." }
-    ],
-    importantNotes: [
-      "Traditional readings often interpret different sections of the cup (handle area, rim, bottom).",
-      "Note any prominent shapes or symbols you see immediately."
-    ],
-    imageSrc: "/images/instructions/coffee-cup.png",
-    imageAlt: "Coffee cup with grounds",
-    imageAiHint: "coffee grounds",
   },
   tarot: {
     pageTitle: "Preparing for Your Tarot Reading",
@@ -129,9 +109,8 @@ const instructionsData: Record<string, InstructionSet> = {
   },
 };
 
-
 interface WelcomeInstructionsProps {
-  readingType: "tea" | "coffee" | "tarot" | "runes";
+  readingType: "tea" | "tarot" | "runes"; // Coffee is handled separately
 }
 
 export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
@@ -161,14 +140,12 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
     if (data) {
       setInstructions(data);
     } else {
-      // Fallback or error handling if readingType is invalid
-      router.replace('/'); // Or show an error message
+      router.replace('/');
     }
     setIsLoadingContent(false);
   }, [readingType, router]);
 
   useEffect(() => {
-    // Redirect Tassologist to their dashboard if they land on a welcome page
     if (!authLoading && !loadingProfile && user && userProfile) {
       if (userProfile.role === 'tassologist') {
         router.replace('/tassologist/dashboard');
@@ -221,6 +198,9 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
   };
 
   const handleReadyClick = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('selectedReadingType', readingType);
+    }
     router.push('/get-reading');
   };
 
@@ -236,7 +216,6 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
   }
 
   if (!instructions) {
-    // This case should ideally be handled by the redirect in the first useEffect if readingType is invalid
     return (
         <div className="container mx-auto min-h-screen flex flex-col items-center justify-center py-8">
             <p>Instructions not found for {readingType}.</p>
@@ -244,7 +223,6 @@ export function WelcomeInstructions({ readingType }: WelcomeInstructionsProps) {
         </div>
     );
   }
-
 
   return (
     <div className="container mx-auto min-h-screen flex flex-col items-center justify-center py-8 selection:bg-accent selection:text-accent-foreground">

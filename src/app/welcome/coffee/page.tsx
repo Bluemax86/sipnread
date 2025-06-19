@@ -1,8 +1,9 @@
-
 'use client';
 
-import { WelcomeInstructions } from '@/components/sipnread/WelcomeInstructions';
+// Import the user's manually created component for coffee instructions
+import { CoffeeWelcomeInstructions } from '@/components/sipnread/CoffeeWelcomeInstructions';
 
 export default function CoffeeWelcomePage() {
-  return <WelcomeInstructions readingType="coffee" />;
+  // Render the user's specific coffee instructions component
+  return <CoffeeWelcomeInstructions />;
 }
