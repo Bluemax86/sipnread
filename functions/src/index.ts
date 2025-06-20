@@ -200,11 +200,10 @@ export const saveReadingDataCallable = onCall(async (request) => {
 const SubmitRoxyReadingRequestCallableInputSchema = z.object({
   userEmail: z.string().email("Valid email is required for the request."),
   originalReadingId: z.string().optional().nullable(),
-  price: z.preprocess(
-    (val) => (typeof val === "string" ? parseFloat(val) : val),
-    z.number({invalid_type_error: "Price must be a number.", required_error: "Price is required."})
-     .positive("Price must be a positive number.")
-  ),
+  price: z.number({
+    required_error: "Price is required.",
+    invalid_type_error: "Price must be a number.",
+  }).positive("Price must be a positive number."),
   readingType: ReadingTypeEnum, 
 });
 export type SubmitRoxyReadingRequestCallableInput = z.infer<typeof SubmitRoxyReadingRequestCallableInputSchema>;
@@ -214,10 +213,16 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "The function must be called while authenticated.");
   }
   const userId = request.auth.uid;
+
+  console.log("[submitRoxyReadingRequestCallable] Received raw data:", JSON.stringify(request.data));
   const data = request.data as SubmitRoxyReadingRequestCallableInput;
+  console.log("[submitRoxyReadingRequestCallable] Raw price received:", data.price, "Type:", typeof data.price);
+
 
   try {
     const validatedData = SubmitRoxyReadingRequestCallableInputSchema.parse(data);
+    console.log("[submitRoxyReadingRequestCallable] Validated data:", JSON.stringify(validatedData));
+    console.log("[submitRoxyReadingRequestCallable] Validated price:", validatedData.price);
 
     let userNameForSubject = validatedData.userEmail; 
     try {
@@ -250,12 +255,12 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
       userEmail: validatedData.userEmail,
       requestDate: admin.firestore.FieldValue.serverTimestamp(),
       status: 'new' as const,
-      price: validatedData.price, // Use dynamic price from input
+      price: validatedData.price, 
       paymentStatus: 'pending' as const,
       userSatisfaction: null,
       tassologistId: assignedTassologistId || null,
       originalReadingId: validatedData.originalReadingId || null,
-      readingType: validatedData.readingType, // Use readingType from input
+      readingType: validatedData.readingType, 
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       dictatedAudioGcsUri: null,
       transcriptionOperationId: null,
@@ -291,6 +296,7 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
   } catch (error: unknown) {
     console.error(`[submitRoxyReadingRequestCallable] Error submitting request for user ${userId}:`, error);
     if (error instanceof z.ZodError) {
+      console.error("[submitRoxyReadingRequestCallable] Zod validation errors:", JSON.stringify(error.errors));
       throw new HttpsError("invalid-argument", `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`);
     }
     const message = error instanceof Error ? error.message : "Failed to submit personalized reading request.";
