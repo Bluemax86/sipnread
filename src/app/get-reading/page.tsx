@@ -3,14 +3,11 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-// import Link from 'next/link'; // Link was unused
 import { ImageUploadForm } from '@/components/sipnread/ImageUploadForm';
 import { getTeaLeafAiAnalysisAction, type FullInterpretationResult } from '../actions';
-// import { Button } from '@/components/ui/button'; // Button was unused
-// import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'; // Card components were unused
 import { Loader2, AlertCircle, Wand2, Brain, Database, LockKeyhole, LogIn, UserPlus } from 'lucide-react';
-import { Button } from '@/components/ui/button'; // Re-added for login/signup
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'; // Re-added for login prompt
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { getFunctions, httpsCallable, type HttpsCallableResult } from 'firebase/functions';
@@ -20,9 +17,10 @@ import { doc, getDoc } from 'firebase/firestore';
 
 
 export default function GetReadingPage() {
-  const [result, setResult] = useState<FullInterpretationResult | null>(null); // Still used for error display
+  const [result, setResult] = useState<FullInterpretationResult | null>(null);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [isSavingReading, setIsSavingReading] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const transitionContainerRef = useRef<HTMLDivElement>(null);
@@ -31,15 +29,12 @@ export default function GetReadingPage() {
   const [selectedReadingTypeForDisplay, setSelectedReadingTypeForDisplay] = useState<string | null>(null);
 
   const loadingAudioRef = useRef<HTMLAudioElement | null>(null);
-  const musicStartTimeRef = useRef<number | null>(null);
-
-  // const [generatingAudioUrls, setGeneratingAudioUrls] = useState<string[]>([]); // Removed as it's specific to this page's audio
   const [selectedAudioUrl, setSelectedAudioUrl] = useState<string | null>(null);
   const [isAudioConfigLoading, setIsAudioConfigLoading] = useState(true);
 
   const [showLoginPromptCard, setShowLoginPromptCard] = useState(false);
 
-  const overallLoading = isLoadingAI || isSavingReading;
+  const overallLoading = isLoadingAI || isSavingReading || isNavigating;
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -58,7 +53,6 @@ export default function GetReadingPage() {
         if (generatingDocSnap.exists()) {
           const data = generatingDocSnap.data();
           if (data.audioURLs && Array.isArray(data.audioURLs) && data.audioURLs.every(url => typeof url === 'string' && url.trim() !== '')) {
-            // setGeneratingAudioUrls(data.audioURLs); // Removed
             if (data.audioURLs.length > 0) {
               const randomIndex = Math.floor(Math.random() * data.audioURLs.length);
               setSelectedAudioUrl(data.audioURLs[randomIndex]);
@@ -119,6 +113,7 @@ export default function GetReadingPage() {
       setResult(null);
       setIsLoadingAI(false);
       setIsSavingReading(false);
+      setIsNavigating(false);
       setShowLoginPromptCard(true); 
       return;
     }
@@ -126,7 +121,8 @@ export default function GetReadingPage() {
 
     setIsLoadingAI(true);
     setIsSavingReading(false);
-    setResult(null); // Clear previous errors
+    setIsNavigating(false);
+    setResult(null);
     localStorage.removeItem('teaLeafReadingResult');
 
     if (loadingAudioRef.current && selectedAudioUrl) {
@@ -138,22 +134,11 @@ export default function GetReadingPage() {
       loadingAudioRef.current.volume = 1;
       loadingAudioRef.current.loop = false;
       loadingAudioRef.current.play().catch(error => console.warn("Audio play failed:", error));
-      musicStartTimeRef.current = Date.now();
-    } else if (!selectedAudioUrl) {
-        console.warn("No audio track selected or available to play during AI processing.");
-        musicStartTimeRef.current = null;
-    } else {
-        musicStartTimeRef.current = Date.now();
     }
-
-    let aiAnalysisResponse: FullInterpretationResult | null = null;
-    let saveSucceeded = false;
-    let finalReadingId: string | undefined;
-    let errorForState: string | undefined;
 
     try {
       const currentReadingTypeFromStorage = typeof window !== 'undefined' ? localStorage.getItem('selectedReadingType') : null;
-      aiAnalysisResponse = await getTeaLeafAiAnalysisAction(
+      const aiAnalysisResponse = await getTeaLeafAiAnalysisAction(
         user.uid,
         imageStorageUrls,
         question,
@@ -162,87 +147,58 @@ export default function GetReadingPage() {
       );
 
       if (aiAnalysisResponse.error || !aiAnalysisResponse.aiInterpretation) {
-        errorForState = aiAnalysisResponse.error || "Failed to get AI interpretation.";
+        throw new Error(aiAnalysisResponse.error || "Failed to get AI interpretation.");
+      }
+      
+      setIsLoadingAI(false);
+      setIsSavingReading(true);
+
+      const functions = getFunctions(firebaseApp);
+      const saveReadingData = httpsCallable<SaveReadingDataCallableInput, { success: boolean; readingId?: string; message?: string }>(functions, 'saveReadingDataCallable');
+
+      let finalReadingTypeForPayload: ReadingType | null | undefined;
+      const validReadingTypes: ReadingType[] = ['tea', 'coffee', 'tarot', 'runes'];
+
+      if (currentReadingTypeFromStorage && validReadingTypes.includes(currentReadingTypeFromStorage as ReadingType)) {
+          finalReadingTypeForPayload = currentReadingTypeFromStorage as ReadingType;
       } else {
-        setIsLoadingAI(false);
-        setIsSavingReading(true);
-
-        const functions = getFunctions(firebaseApp);
-        const saveReadingData = httpsCallable<SaveReadingDataCallableInput, { success: boolean; readingId?: string; message?: string }>(functions, 'saveReadingDataCallable');
-
-        const readingTypeForSave = typeof window !== 'undefined' ? localStorage.getItem('selectedReadingType') : null;
-        let finalReadingTypeForPayload: ReadingType | null | undefined;
-        const validReadingTypes: ReadingType[] = ['tea', 'coffee', 'tarot', 'runes'];
-
-        if (readingTypeForSave && validReadingTypes.includes(readingTypeForSave as ReadingType)) {
-            finalReadingTypeForPayload = readingTypeForSave as ReadingType;
-        } else if (readingTypeForSave === null) {
-            finalReadingTypeForPayload = null;
-        } else {
-            finalReadingTypeForPayload = undefined;
-             if (readingTypeForSave !== null && readingTypeForSave !== undefined) {
-              console.warn(`[GetReadingPage] Unexpected readingType ('${readingTypeForSave}') from localStorage during save. Defaulting to undefined for payload.`);
-            }
-        }
-
-        const saveDataPayload: SaveReadingDataCallableInput = {
-          imageStorageUrls: aiAnalysisResponse.imageStorageUrls || imageStorageUrls,
-          aiSymbolsDetected: aiAnalysisResponse.aiSymbolsDetected || [],
-          aiInterpretation: aiAnalysisResponse.aiInterpretation,
-          userQuestion: aiAnalysisResponse.userQuestion || null,
-          userSymbolNames: aiAnalysisResponse.userSymbolNames || null,
-          readingType: finalReadingTypeForPayload,
-        };
-
-        const saveResult: HttpsCallableResult<{ success: boolean; readingId?: string; message?: string }> = await saveReadingData(saveDataPayload);
-
-        if (saveResult.data.success && saveResult.data.readingId) {
-          saveSucceeded = true;
-          finalReadingId = saveResult.data.readingId;
-        } else {
-          errorForState = saveResult.data.message || 'Failed to save reading data.';
-        }
+          finalReadingTypeForPayload = undefined;
       }
-    } catch (e: unknown) {
-      console.error("Error during interpretation or saving process:", e);
-      if (!errorForState) {
-         errorForState = e instanceof Error ? e.message : 'An unexpected error occurred.';
-      }
-    } finally {
-      const performFinalActions = () => {
-        setIsLoadingAI(false);
-        setIsSavingReading(false);
 
-        if (saveSucceeded && aiAnalysisResponse && finalReadingId) {
-          const finalResultForStorage: FullInterpretationResult = {
-            ...aiAnalysisResponse,
-            readingType: aiAnalysisResponse.readingType, // Ensure readingType is included
-            readingId: finalReadingId,
-            error: undefined, 
-          };
-          localStorage.setItem('teaLeafReadingResult', JSON.stringify(finalResultForStorage));
-          router.push('/reading'); // Navigate to reading page
-        } else {
-          // If there was an error, keep it in the 'result' state to display on this page
-          setResult({
-            ...(aiAnalysisResponse || {}), // Spread any partial AI response
-            readingType: aiAnalysisResponse?.readingType,
-            error: errorForState || "An unknown error occurred after processing."
-          });
-        }
+      const saveDataPayload: SaveReadingDataCallableInput = {
+        imageStorageUrls: aiAnalysisResponse.imageStorageUrls || imageStorageUrls,
+        aiSymbolsDetected: aiAnalysisResponse.aiSymbolsDetected || [],
+        aiInterpretation: aiAnalysisResponse.aiInterpretation,
+        userQuestion: aiAnalysisResponse.userQuestion || null,
+        userSymbolNames: aiAnalysisResponse.userSymbolNames || null,
+        readingType: finalReadingTypeForPayload,
       };
 
-      const processingEndTime = Date.now();
-      const musicStartedAt = musicStartTimeRef.current;
-      const elapsedTimeMs = musicStartedAt ? processingEndTime - musicStartedAt : Infinity;
-      const minDisplayTimeMs = 10000; 
+      const saveResult: HttpsCallableResult<{ success: boolean; readingId?: string; message?: string }> = await saveReadingData(saveDataPayload);
 
-      if (musicStartedAt && elapsedTimeMs < minDisplayTimeMs) {
-        const delayMs = minDisplayTimeMs - elapsedTimeMs;
-        setTimeout(performFinalActions, delayMs);
-      } else {
-        performFinalActions();
+      if (!saveResult.data.success || !saveResult.data.readingId) {
+        throw new Error(saveResult.data.message || 'Failed to save reading data.');
       }
+
+      const finalResultForStorage: FullInterpretationResult = {
+        ...aiAnalysisResponse,
+        readingType: aiAnalysisResponse.readingType,
+        readingId: saveResult.data.readingId,
+        error: undefined,
+      };
+      localStorage.setItem('teaLeafReadingResult', JSON.stringify(finalResultForStorage));
+      
+      setIsSavingReading(false);
+      setIsNavigating(true);
+      router.push('/reading');
+
+    } catch (e: unknown) {
+      console.error("Error during interpretation or saving process:", e);
+      const errorMessage = e instanceof Error ? e.message : 'An unexpected error occurred.';
+      setResult({ error: errorMessage });
+      setIsLoadingAI(false);
+      setIsSavingReading(false);
+      setIsNavigating(false);
     }
   };
 
@@ -321,9 +277,14 @@ export default function GetReadingPage() {
                   <p className="ml-4 text-lg mt-4 text-muted-foreground">Saving your reading...</p>
                 </>
               )}
+              {isNavigating && (
+                <>
+                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                  <p className="ml-4 text-lg mt-4 text-muted-foreground">Preparing your reading...</p>
+                </>
+              )}
             </div>
             
-            {/* Error display on this page if something went wrong before navigating */}
              {(result && result.error && !overallLoading) && (
                 <Card className="w-full max-w-xl shadow-lg animate-fade-in text-center">
                     <CardHeader>
@@ -332,7 +293,7 @@ export default function GetReadingPage() {
                     </CardHeader>
                     <CardContent>
                     <p className="text-muted-foreground mb-6">{result.error}</p>
-                    <Button onClick={() => { setResult(null); setIsLoadingAI(false); setIsSavingReading(false); musicStartTimeRef.current = null; setShowLoginPromptCard(false); }} variant="outline">
+                    <Button onClick={() => { setResult(null); }} variant="outline">
                         Try Again
                     </Button>
                     </CardContent>
@@ -347,4 +308,3 @@ export default function GetReadingPage() {
     </div>
   );
 }
-    

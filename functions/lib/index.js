@@ -213,13 +213,9 @@ exports.submitRoxyReadingRequestCallable = (0, https_1.onCall)(async (request) =
         throw new https_1.HttpsError("unauthenticated", "The function must be called while authenticated.");
     }
     const userId = request.auth.uid;
-    console.log("[submitRoxyReadingRequestCallable] Received raw data:", JSON.stringify(request.data));
     const data = request.data;
-    console.log("[submitRoxyReadingRequestCallable] Raw price received:", data.price, "Type:", typeof data.price);
     try {
         const validatedData = SubmitRoxyReadingRequestCallableInputSchema.parse(data);
-        console.log("[submitRoxyReadingRequestCallable] Validated data:", JSON.stringify(validatedData));
-        console.log("[submitRoxyReadingRequestCallable] Validated price:", validatedData.price);
         let userNameForSubject = validatedData.userEmail;
         try {
             const userProfileSnap = await adminDb.collection('profiles').doc(userId).get();
