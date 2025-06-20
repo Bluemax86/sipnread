@@ -1,3 +1,4 @@
+
 // src/app/actions.ts
 'use server';
 
@@ -8,8 +9,20 @@ import { app as firebaseApp, db } from '@/lib/firebase';
 import { SpeechClient } from '@google-cloud/speech';
 import type { protos } from '@google-cloud/speech';
 
+// Note: The full definition for SubmitRoxyReadingRequestCallableInput is in functions/src/index.ts
+// We only need a partial type here for client-side type safety if using the deprecated action.
+// For direct callable usage, the type is inferred or can be explicitly imported from functions/src if needed.
+// However, to avoid complex pathing, we'll redefine a matching structure here.
+export interface SubmitRoxyReadingRequestCallableInput {
+  userEmail: string;
+  originalReadingId?: string | null;
+  price: number; // Added
+  readingType: ReadingType; // Added
+}
+
+
 import type {
-  SubmitRoxyReadingRequestCallableInput,
+  // SubmitRoxyReadingRequestCallableInput, // Replaced by above local definition for consistency
   SaveTassologistInterpretationCallableInput,
   MarkPersonalizedReadingAsReadCallableInput
 } from '@/../functions/src';
@@ -42,7 +55,7 @@ export interface TeaReadingDocument {
   userSymbolNames?: string[];
   manualSymbolsDetected: StoredManualSymbol[];
   manualInterpretation: string;
-  readingType?: ReadingType | null; // Added readingType
+  readingType?: ReadingType | null;
   updatedAt?: Timestamp;
 }
 
@@ -64,12 +77,12 @@ export interface RoxyPersonalizedReadingRequest {
   originalReadingId?: string | null;
   requestDate: Timestamp;
   status: 'new' | 'in-progress' | 'completed' | 'cancelled' | 'read';
-  price: number;
+  price: number; // This field already exists and will be populated by the function
   paymentStatus: 'pending';
   userSatisfaction?: 'happy' | 'neutral' | 'unhappy' | null;
   completionDate?: Timestamp;
   tassologistId?: string;
-  readingType?: ReadingType | null; // Added readingType
+  readingType?: ReadingType | null;
   updatedAt?: Timestamp;
   dictatedAudioGcsUri?: string | null;
   transcriptionOperationId?: string | null;
@@ -84,7 +97,7 @@ export interface AiAnalysisResult {
   imageStorageUrls?: string[];
   userQuestion?: string | null;
   userSymbolNames?: string[] | null;
-  readingType?: ReadingType | string | null; // Added readingType
+  readingType?: ReadingType | string | null;
 }
 
 export interface FullInterpretationResult extends AiAnalysisResult {
@@ -97,7 +110,7 @@ export async function getTeaLeafAiAnalysisAction(
   imageStorageUrls: string[],
   userQuestion?: string,
   userSymbolNames?: string[],
-  readingType?: string // Added readingType parameter
+  readingType?: string 
 ): Promise<AiAnalysisResult> {
   if (!userIdClientProvided) {
     return { error: "User context missing for AI analysis." };
@@ -125,7 +138,7 @@ export async function getTeaLeafAiAnalysisAction(
       imageStorageUrls: imageStorageUrls,
       userQuestion: (userQuestion && userQuestion.trim() !== '') ? userQuestion : null,
       userSymbolNames: (userSymbolNames && userSymbolNames.length > 0) ? userSymbolNames.filter(name => name.trim() !== '') : null,
-      readingType: readingType || null, // Include readingType in the result
+      readingType: readingType || null,
     };
 
   } catch (e: unknown) {
@@ -268,26 +281,38 @@ export async function getTranscriptionResultAction(
 /**
  * @deprecated This server action is no longer used by the primary "Request Roxy's Reading" flow on ReadingPage.
  * The client now calls the `submitRoxyReadingRequestCallable` Firebase Function directly.
+ * The type SubmitRoxyReadingRequestCallableInput is defined locally above for reference
+ * but the primary definition is in functions/src/index.ts
  */
 export async function submitRoxyReadingRequestAction(
-  userIdClientProvided: string,
+  userIdClientProvided: string, // This param is not used by the callable; auth is handled by callable context
   userEmail: string,
-  originalReadingId?: string
+  originalReadingId?: string,
+  price?: number, // Added price
+  readingType?: ReadingType // Added readingType
 ): Promise<{ success: boolean; error?: string; requestId?: string }> {
-  if (!userIdClientProvided || !userEmail) {
-    return { success: false, error: "User ID and Email are required." };
+  if (!userEmail) {
+    return { success: false, error: "User Email is required." };
+  }
+  if (price === undefined || price <=0) {
+    return { success: false, error: "Valid price is required." };
+  }
+   if (!readingType) {
+    return { success: false, error: "Reading type is required." };
   }
 
   try {
     const functions = getFunctions(firebaseApp);
     const submitRoxyReadingRequest = httpsCallable<
-      SubmitRoxyReadingRequestCallableInput,
+      SubmitRoxyReadingRequestCallableInput, // This should match the type in functions/src/index.ts
       { success: boolean; requestId?: string; message?: string }
     >(functions, 'submitRoxyReadingRequestCallable');
 
     const payload: SubmitRoxyReadingRequestCallableInput = {
       userEmail,
       originalReadingId: originalReadingId || null,
+      price,
+      readingType,
     };
 
     const result = await submitRoxyReadingRequest(payload);

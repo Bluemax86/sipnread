@@ -164,10 +164,6 @@ export const saveReadingDataCallable = onCall(async (request) => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    // Correctly handle readingType:
-    // If validatedData.readingType is one of the enum strings, or null, add it.
-    // If validatedData.readingType is undefined (because it was optional and not provided),
-    // then readingDocData.readingType will not be set, and Firestore will omit the field.
     if (validatedData.readingType !== undefined) {
       readingDocData.readingType = validatedData.readingType;
     }
@@ -204,6 +200,8 @@ export const saveReadingDataCallable = onCall(async (request) => {
 const SubmitRoxyReadingRequestCallableInputSchema = z.object({
   userEmail: z.string().email("Valid email is required for the request."),
   originalReadingId: z.string().optional().nullable(),
+  price: z.number().positive("Price must be a positive number."),
+  readingType: ReadingTypeEnum, 
 });
 export type SubmitRoxyReadingRequestCallableInput = z.infer<typeof SubmitRoxyReadingRequestCallableInputSchema>;
 
@@ -243,40 +241,17 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
       console.warn("[submitRoxyReadingRequestCallable] No tassologist found. Request will be created without assignment.");
     }
 
-    let readingTypeFromOriginal: ReadingType | null = null;
-    if (validatedData.originalReadingId) {
-      try {
-        const originalReadingDoc = await adminDb.collection('readings').doc(validatedData.originalReadingId).get();
-        if (originalReadingDoc.exists) {
-          const originalReadingData = originalReadingDoc.data();
-          if (originalReadingData && originalReadingData.readingType) {
-            const parsedReadingType = ReadingTypeEnum.safeParse(originalReadingData.readingType);
-            if (parsedReadingType.success) {
-              readingTypeFromOriginal = parsedReadingType.data;
-            } else {
-              console.warn(`[submitRoxyReadingRequestCallable] Invalid readingType ('${originalReadingData.readingType}') found on original reading ${validatedData.originalReadingId}. Defaulting to null for personalized request.`);
-            }
-          } else {
-             console.warn(`[submitRoxyReadingRequestCallable] readingType field missing or undefined on original reading ${validatedData.originalReadingId}. Defaulting to null for personalized request.`);
-          }
-        }
-      } catch (fetchError) {
-        console.warn(`[submitRoxyReadingRequestCallable] Could not fetch original reading ${validatedData.originalReadingId} to get readingType:`, fetchError);
-      }
-    }
-
-
     const requestDocData: Record<string, unknown> = {
       userId,
       userEmail: validatedData.userEmail,
       requestDate: admin.firestore.FieldValue.serverTimestamp(),
       status: 'new' as const,
-      price: 50,
+      price: validatedData.price, // Use dynamic price from input
       paymentStatus: 'pending' as const,
       userSatisfaction: null,
       tassologistId: assignedTassologistId || null,
       originalReadingId: validatedData.originalReadingId || null,
-      readingType: readingTypeFromOriginal,
+      readingType: validatedData.readingType, // Use readingType from input
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       dictatedAudioGcsUri: null,
       transcriptionOperationId: null,
@@ -287,14 +262,15 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
     const requestRef = await adminDb.collection('personalizedReadings').add(requestDocData);
 
     if (tassologistEmailForNotification) {
-      const subject = `New Personalized Reading Request from ${userNameForSubject}`;
+      const subject = `New Personalized Reading Request from ${userNameForSubject} ($${validatedData.price})`;
       const htmlBody = `
         <p>Hello Roxy,</p>
-        <p>A new personalized tea leaf reading request has been submitted by ${userNameForSubject} (${validatedData.userEmail}).</p>
+        <p>A new personalized reading request has been submitted by ${userNameForSubject} (${validatedData.userEmail}).</p>
         <ul>
           <li><strong>Request ID:</strong> ${requestRef.id}</li>
           ${validatedData.originalReadingId ? `<li><strong>Original AI Reading ID:</strong> ${validatedData.originalReadingId}</li>` : ''}
-          ${readingTypeFromOriginal ? `<li><strong>Reading Type:</strong> ${readingTypeFromOriginal.charAt(0).toUpperCase() + readingTypeFromOriginal.slice(1)}</li>` : ''}
+          <li><strong>Reading Type:</strong> ${validatedData.readingType.charAt(0).toUpperCase() + validatedData.readingType.slice(1)}</li>
+          <li><strong>Price:</strong> $${validatedData.price.toFixed(2)}</li>
         </ul>
         <p>Please log in to the Tassologist Dashboard to view and process this request.</p>
         <p>Thank you,<br/>Sip-n-Read System</p>
@@ -348,7 +324,6 @@ export type SaveTassologistInterpretationCallableInput = z.infer<typeof SaveTass
 type PersonalizedReadingStatus = 'new' | 'in-progress' | 'completed' | 'cancelled' | 'read';
 type TranscriptionStatus = 'not_requested' | 'pending' | 'completed' | 'failed' | null;
 
-// This interface defines the specific fields allowed in the request update payload.
 interface RequestUpdatePayloadBase {
   updatedAt: admin.firestore.FieldValue;
   transcriptionError: string | null;
@@ -356,7 +331,6 @@ interface RequestUpdatePayloadBase {
   status?: PersonalizedReadingStatus;
   transcriptionStatus?: TranscriptionStatus;
 }
-// This type combines the base with an index signature for flexibility with Firestore updates.
 type RequestUpdatePayload = RequestUpdatePayloadBase & {
   [key: string]: admin.firestore.FieldValue | string | null | PersonalizedReadingStatus | TranscriptionStatus | boolean | number | Date | undefined;
 };
@@ -688,4 +662,3 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     throw new HttpsError("internal", errorMessage);
   }
 });
-
