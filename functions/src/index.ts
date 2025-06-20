@@ -213,16 +213,10 @@ export const submitRoxyReadingRequestCallable = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "The function must be called while authenticated.");
   }
   const userId = request.auth.uid;
-
-  console.log("[submitRoxyReadingRequestCallable] Received raw data:", JSON.stringify(request.data));
   const data = request.data as SubmitRoxyReadingRequestCallableInput;
-  console.log("[submitRoxyReadingRequestCallable] Raw price received:", data.price, "Type:", typeof data.price);
-
 
   try {
     const validatedData = SubmitRoxyReadingRequestCallableInputSchema.parse(data);
-    console.log("[submitRoxyReadingRequestCallable] Validated data:", JSON.stringify(validatedData));
-    console.log("[submitRoxyReadingRequestCallable] Validated price:", validatedData.price);
 
     let userNameForSubject = validatedData.userEmail; 
     try {
@@ -672,4 +666,3 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     throw new HttpsError("internal", errorMessage);
   }
 });
-
