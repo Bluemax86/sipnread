@@ -200,7 +200,11 @@ export const saveReadingDataCallable = onCall(async (request) => {
 const SubmitRoxyReadingRequestCallableInputSchema = z.object({
   userEmail: z.string().email("Valid email is required for the request."),
   originalReadingId: z.string().optional().nullable(),
-  price: z.number().positive("Price must be a positive number."),
+  price: z.preprocess(
+    (val) => (typeof val === "string" ? parseFloat(val) : val),
+    z.number({invalid_type_error: "Price must be a number.", required_error: "Price is required."})
+     .positive("Price must be a positive number.")
+  ),
   readingType: ReadingTypeEnum, 
 });
 export type SubmitRoxyReadingRequestCallableInput = z.infer<typeof SubmitRoxyReadingRequestCallableInputSchema>;
@@ -662,3 +666,4 @@ export const processAndTranscribeAudioCallable = onCall(processAudioCallableOpti
     throw new HttpsError("internal", errorMessage);
   }
 });
+

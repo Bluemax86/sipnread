@@ -171,10 +171,6 @@ exports.saveReadingDataCallable = (0, https_1.onCall)(async (request) => {
             manualInterpretation: "",
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         };
-        // Correctly handle readingType:
-        // If validatedData.readingType is one of the enum strings, or null, add it.
-        // If validatedData.readingType is undefined (because it was optional and not provided),
-        // then readingDocData.readingType will not be set, and Firestore will omit the field.
         if (validatedData.readingType !== undefined) {
             readingDocData.readingType = validatedData.readingType;
         }
@@ -206,6 +202,8 @@ exports.saveReadingDataCallable = (0, https_1.onCall)(async (request) => {
 const SubmitRoxyReadingRequestCallableInputSchema = zod_1.z.object({
     userEmail: zod_1.z.string().email("Valid email is required for the request."),
     originalReadingId: zod_1.z.string().optional().nullable(),
+    price: zod_1.z.number().positive("Price must be a positive number."),
+    readingType: ReadingTypeEnum,
 });
 exports.submitRoxyReadingRequestCallable = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
@@ -240,41 +238,17 @@ exports.submitRoxyReadingRequestCallable = (0, https_1.onCall)(async (request) =
         else {
             console.warn("[submitRoxyReadingRequestCallable] No tassologist found. Request will be created without assignment.");
         }
-        let readingTypeFromOriginal = null;
-        if (validatedData.originalReadingId) {
-            try {
-                const originalReadingDoc = await adminDb.collection('readings').doc(validatedData.originalReadingId).get();
-                if (originalReadingDoc.exists) {
-                    const originalReadingData = originalReadingDoc.data();
-                    if (originalReadingData && originalReadingData.readingType) {
-                        const parsedReadingType = ReadingTypeEnum.safeParse(originalReadingData.readingType);
-                        if (parsedReadingType.success) {
-                            readingTypeFromOriginal = parsedReadingType.data;
-                        }
-                        else {
-                            console.warn(`[submitRoxyReadingRequestCallable] Invalid readingType ('${originalReadingData.readingType}') found on original reading ${validatedData.originalReadingId}. Defaulting to null for personalized request.`);
-                        }
-                    }
-                    else {
-                        console.warn(`[submitRoxyReadingRequestCallable] readingType field missing or undefined on original reading ${validatedData.originalReadingId}. Defaulting to null for personalized request.`);
-                    }
-                }
-            }
-            catch (fetchError) {
-                console.warn(`[submitRoxyReadingRequestCallable] Could not fetch original reading ${validatedData.originalReadingId} to get readingType:`, fetchError);
-            }
-        }
         const requestDocData = {
             userId,
             userEmail: validatedData.userEmail,
             requestDate: admin.firestore.FieldValue.serverTimestamp(),
             status: 'new',
-            price: 50,
+            price: validatedData.price, // Use dynamic price from input
             paymentStatus: 'pending',
             userSatisfaction: null,
             tassologistId: assignedTassologistId || null,
             originalReadingId: validatedData.originalReadingId || null,
-            readingType: readingTypeFromOriginal,
+            readingType: validatedData.readingType, // Use readingType from input
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             dictatedAudioGcsUri: null,
             transcriptionOperationId: null,
@@ -283,14 +257,15 @@ exports.submitRoxyReadingRequestCallable = (0, https_1.onCall)(async (request) =
         };
         const requestRef = await adminDb.collection('personalizedReadings').add(requestDocData);
         if (tassologistEmailForNotification) {
-            const subject = `New Personalized Reading Request from ${userNameForSubject}`;
+            const subject = `New Personalized Reading Request from ${userNameForSubject} ($${validatedData.price})`;
             const htmlBody = `
         <p>Hello Roxy,</p>
-        <p>A new personalized tea leaf reading request has been submitted by ${userNameForSubject} (${validatedData.userEmail}).</p>
+        <p>A new personalized reading request has been submitted by ${userNameForSubject} (${validatedData.userEmail}).</p>
         <ul>
           <li><strong>Request ID:</strong> ${requestRef.id}</li>
           ${validatedData.originalReadingId ? `<li><strong>Original AI Reading ID:</strong> ${validatedData.originalReadingId}</li>` : ''}
-          ${readingTypeFromOriginal ? `<li><strong>Reading Type:</strong> ${readingTypeFromOriginal.charAt(0).toUpperCase() + readingTypeFromOriginal.slice(1)}</li>` : ''}
+          <li><strong>Reading Type:</strong> ${validatedData.readingType.charAt(0).toUpperCase() + validatedData.readingType.slice(1)}</li>
+          <li><strong>Price:</strong> $${validatedData.price.toFixed(2)}</li>
         </ul>
         <p>Please log in to the Tassologist Dashboard to view and process this request.</p>
         <p>Thank you,<br/>Sip-n-Read System</p>
