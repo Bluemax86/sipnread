@@ -20,7 +20,6 @@ export default function GetReadingPage() {
   const [result, setResult] = useState<FullInterpretationResult | null>(null);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [isSavingReading, setIsSavingReading] = useState(false);
-  const [isNavigating, setIsNavigating] = useState(false);
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const transitionContainerRef = useRef<HTMLDivElement>(null);
@@ -34,7 +33,7 @@ export default function GetReadingPage() {
 
   const [showLoginPromptCard, setShowLoginPromptCard] = useState(false);
 
-  const overallLoading = isLoadingAI || isSavingReading || isNavigating;
+  const overallLoading = isLoadingAI || isSavingReading;
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -113,7 +112,6 @@ export default function GetReadingPage() {
       setResult(null);
       setIsLoadingAI(false);
       setIsSavingReading(false);
-      setIsNavigating(false);
       setShowLoginPromptCard(true); 
       return;
     }
@@ -121,7 +119,6 @@ export default function GetReadingPage() {
 
     setIsLoadingAI(true);
     setIsSavingReading(false);
-    setIsNavigating(false);
     setResult(null);
     localStorage.removeItem('teaLeafReadingResult');
 
@@ -188,8 +185,8 @@ export default function GetReadingPage() {
       };
       localStorage.setItem('teaLeafReadingResult', JSON.stringify(finalResultForStorage));
       
-      setIsSavingReading(false);
-      setIsNavigating(true);
+      // By not setting isSavingReading to false here, the "Saving..." card
+      // remains visible until the router navigates away, preventing the flicker.
       router.push('/reading');
 
     } catch (e: unknown) {
@@ -198,7 +195,6 @@ export default function GetReadingPage() {
       setResult({ error: errorMessage });
       setIsLoadingAI(false);
       setIsSavingReading(false);
-      setIsNavigating(false);
     }
   };
 
@@ -275,12 +271,6 @@ export default function GetReadingPage() {
                 <>
                   <Database className="h-12 w-12 animate-pulse text-primary" />
                   <p className="ml-4 text-lg mt-4 text-muted-foreground">Saving your reading...</p>
-                </>
-              )}
-              {isNavigating && (
-                <>
-                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                  <p className="ml-4 text-lg mt-4 text-muted-foreground">Preparing your reading...</p>
                 </>
               )}
             </div>
